@@ -1,5 +1,7 @@
 # Academic Dashboard
 
+**English** | [简体中文](README.zh-CN.md)
+
 Academic Dashboard is a desktop Obsidian plugin that turns an existing Vault
 into a calm, widget-based workspace for study, research, daily planning, and
 review-first Agent handoffs.
@@ -276,6 +278,7 @@ run automated writes against a personal Vault.
 ```text
 academic-dashboard/
 ├── README.md
+├── README.zh-CN.md             # Simplified Chinese README
 ├── manifest.json               # public Obsidian manifest
 ├── versions.json               # version-to-minimum-Obsidian map
 ├── PROJECT.md                  # authoritative product boundaries
