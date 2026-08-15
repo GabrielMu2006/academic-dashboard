@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+plugin/node_modules/
+plugin/main.js
+plugin/*.js.map
+plugin/dist/
+coverage/
+release/
+*.log
+.env
+.env.*
+!.env.example
+**/data.json

@@ -1,0 +1,539 @@
+export const LOCALE_MODES = ['auto', 'en', 'zh-CN'] as const;
+export type LocaleMode = (typeof LOCALE_MODES)[number];
+export type SupportedLocale = Exclude<LocaleMode, 'auto'>;
+
+export interface LocaleSettings {
+	readonly mode: LocaleMode;
+}
+
+export const DEFAULT_LOCALE_SETTINGS: LocaleSettings = Object.freeze({ mode: 'auto' });
+
+/**
+ * English is the source-of-truth resource. Keys describe product meaning so
+ * copy can change without changing callers. Product/protocol names and YAML
+ * values intentionally remain unchanged.
+ */
+export const ENGLISH_RESOURCES = Object.freeze({
+	'app.name': 'Academic Dashboard',
+	'nav.pages': 'Dashboard pages',
+	'nav.home': 'Home',
+	'nav.study': 'Study',
+	'nav.research': 'Research',
+	'nav.agent': 'Agent',
+	'nav.openHome': 'Open Home page',
+	'nav.openStudy': 'Open Study page',
+	'nav.openResearch': 'Open Research page',
+	'nav.openAgent': 'Open Agent page',
+	'nav.homeWidgets': 'Home widgets',
+	'nav.studyWidgets': 'Study widgets',
+	'nav.researchWidgets': 'Research widgets',
+	'nav.agentWidgets': 'Agent widgets',
+	'layout.edit': 'Edit layout',
+	'layout.done': 'Done',
+	'layout.reset': 'Reset layout',
+	'layout.resetCurrent': 'Reset current page layout',
+	'layout.editingOff': 'Layout editing off.',
+	'layout.updated': 'Layout updated. Changes save automatically.',
+	'layout.instructions': 'Layout editing on. Drag cards to move them, drag a bottom-right handle to resize, or use arrow keys to move and Shift plus arrow keys to resize. Press Escape when done.',
+	'layout.widen': 'Widen the Dashboard to edit the canonical four-column layout.',
+	'layout.widget': '{title} widget',
+	'layout.widgetInstructions': '{title} widget. Use arrow keys to move and Shift plus arrow keys to resize.',
+	'layout.widgetWiden': '{title} widget. Widen the Dashboard to edit the canonical layout.',
+	'page.home.description': 'A clear starting point for the day.',
+	'page.study.description': 'Review learning activity and the work that needs attention.',
+	'page.research.description': 'Keep current reading and research notes within reach.',
+	'page.agent.description': 'Launch conservative workflows through Claudian.',
+	'widget.loading': 'Loading…',
+	'widget.dateTime': 'Date & Time',
+	'widget.dailyQuote': 'Daily Quote',
+	'widget.commands': 'Commands',
+	'widget.calendar': 'Calendar',
+	'widget.todayTasks': 'Today’s Tasks',
+	'widget.recentNotes': 'Recent Notes',
+	'widget.quickLinks': 'Quick Links',
+	'widget.reviewQueue': 'Review Queue',
+	'widget.obsidianActivity': 'Obsidian Activity',
+	'widget.githubContributions': 'GitHub Contributions',
+	'widget.recentPapers': 'Recent Papers',
+	'widget.agentStatus': 'Agent Status',
+	'widget.agentHandoff': 'Agent Handoff',
+	'widget.approvedWorkflows': 'Approved Workflows',
+	'empty.quickLinks': 'No quick links configured yet.',
+	'empty.commands': 'No commands configured yet.',
+	'empty.quotes': 'No local quotes configured.',
+	'empty.nativeTasks': 'No Native Markdown tasks are due today.',
+	'empty.tasksPlugin': 'No Tasks plugin tasks are due today.',
+	'empty.nativeReviews': 'No Native Markdown reviews or flashcards are due.',
+	'empty.spacedRepetition': 'No Spaced Repetition items are due.',
+	'empty.papers': 'No paper notes match the current metadata mapping and filters.',
+	'source.nativeMarkdown': 'Native Markdown fallback',
+	'common.save': 'Save',
+	'common.reset': 'Reset',
+	'common.refresh': 'Refresh',
+	'common.undo': 'Undo',
+	'common.unavailable': 'Unavailable',
+	'agent.openClaudian': 'Open Claudian',
+	'agent.prepare': 'Prepare handoff',
+	'agent.preparing': 'Preparing…',
+	'agent.reviewBoundary': 'Requests are prepared for review and are never auto-sent.',
+	'agent.readOnly': 'Read only',
+	'agent.reviewBeforeWrite': 'Review before write',
+	'agent.selectedTarget': 'Selected agent target',
+	'agent.workflow': 'Agent workflow',
+	'agent.optionalFocus': 'Optional focus or constraints (note content is not stored here)',
+	'agent.readOnlyBoundary': 'Read-only: the result stays in Claudian chat.',
+	'agent.writeBoundary': 'Proposed write: Claudian must show a plan or diff and wait for approval.',
+	'agent.continue': 'Continue conversations and manage target settings in Claudian.',
+	'agent.providerBoundary': 'Provider, model, authentication, and permissions stay in Claudian and the selected Agent.',
+	'agent.preferenceLabel': 'Remembered Dashboard preference',
+	'agent.preferenceHelp': 'Confirm this target in Claudian before sending.',
+	'agent.statusReady': 'Claudian handoff is available for review.',
+	'agent.versionStatus': 'Claudian {version} · verified handoff',
+	'agent.selectedConfirm': '{target} selected. Confirm the same target in Claudian.',
+	'agent.workflowLabel': 'Workflow',
+	'agent.focusLabel': 'Focus or constraints',
+	'agent.dailyRoutingFocus': 'Optional routing rules, headings to include, or material to leave in the Daily Note',
+	'agent.dailyRoutingMissing': 'Today’s configured Daily Note does not exist. Create it from the Home calendar first.',
+	'workflow.organize': 'Organize and polish current note',
+	'workflow.summarize': 'Summarize current note',
+	'workflow.repair': 'Check and repair Markdown',
+	'workflow.answer': 'Search Vault and answer',
+	'workflow.dailyOrganize': 'Organize today’s note into academic notes',
+	'workflow.course': 'Create course note',
+	'workflow.paper': 'Create paper-reading note',
+	'filter.reviews': 'Filter reviews',
+	'filter.allReviews': 'All reviews',
+	'filter.notes': 'Notes',
+	'filter.flashcards': 'Flashcards',
+	'filter.papers': 'Filter papers',
+	'filter.allStatuses': 'All statuses',
+	'filter.unread': 'Unread',
+	'filter.reading': 'Reading',
+	'filter.reviewed': 'Reviewed',
+	'filter.unspecified': 'Unspecified',
+	'filter.year': 'Year',
+	'filter.reviewSearchAria': 'Filter review queue by note name or path',
+	'filter.reviewKindAria': 'Filter review queue by item type',
+	'filter.paperSearchAria': 'Filter papers by title, author, venue, or digital object identifier',
+	'filter.paperStatusAria': 'Filter papers by reading status',
+	'filter.paperYearAria': 'Filter papers by publication year',
+	'review.note': 'Note review',
+	'research.openPaper': 'Open paper note: {title}',
+	'research.setStatusGroup': 'Set reading status for {title}',
+	'research.setStatus': 'Set {title} status to {status}',
+	'research.addFavorite': 'Add {title} to favorites',
+	'research.removeFavorite': 'Remove {title} from favorites',
+	'research.addFavoriteButton': 'Add favorite',
+	'research.removeFavoriteButton': 'Remove favorite',
+	'calendar.newCourse': 'New course note',
+	'calendar.newPaper': 'New paper note',
+	'calendar.currentMonth': 'Current month calendar',
+	'calendar.openDaily': 'Open daily note for {date}',
+	'calendar.reviewDaily': 'Review creation of daily note for {date}',
+	'activity.publicCount': '{count} public contributions in this window',
+	'activity.noteCount': '{count} modified notes in this window',
+	'activity.heatmap': '{source} local activity: {count} contributions over {days} days.',
+	'activity.legend': 'Activity intensity from fewer to more contributions',
+	'activity.less': 'Less',
+	'activity.more': 'More',
+	'activity.lastUpdated': 'Last updated {date}.',
+	'activity.noUpdate': 'No successful update yet.',
+	'activity.stale': 'Data is stale; showing last-good cache.',
+	'activity.fresh': 'Data is fresh.',
+	'activity.privateCount': '{count} anonymous private contributions.',
+	'activity.refreshError': 'Refresh error: {code}.',
+	'settings.cacheSummary': '{count} normalized day entries. Last updated {date}. Fresh for six hours.',
+	'settings.retainedLogs': '{count} retained. Logs contain workflow, agent, affected paths, outcome, and minimal error codes only—never prompts, note contents, or credentials.',
+	'settings.githubConfigured': 'Configured in Obsidian SecretStorage. Use read:user only if you enable the anonymous private contribution count. Repository scope is never needed.',
+	'settings.githubNotConfigured': 'Not configured. Use read:user only if you enable the anonymous private contribution count. Repository scope is never needed.',
+	'settings.cacheEmpty': 'No cached contribution data. Secret reference: {reference}.',
+	'settings.templateSettings': '{label} template settings',
+	'settings.layoutName': '{page} layout',
+	'settings.layoutRestore': 'Restore the default fixed-size layout for {page}.',
+	'settings.defaultPage': 'Default page',
+	'settings.defaultPageDesc': 'Page shown when a new dashboard view opens.',
+	'settings.agentHandoff': 'Agent handoff',
+	'settings.selectedAgent': 'Selected agent',
+	'settings.github': 'GitHub contributions',
+	'settings.personalAccessToken': 'Personal access token',
+	'settings.saveSecurely': 'Save securely',
+	'settings.widgetVisibility': 'Widget visibility',
+	'settings.metadata': 'Academic metadata',
+	'settings.paperActions': 'Research paper actions',
+	'settings.templates': 'Academic note templates',
+	'settings.quickLinks': 'Quick links',
+	'settings.quotes': 'Local quotes',
+	'settings.layoutReset': 'Layout reset',
+	'settings.agentConfiguration': 'Agent configuration',
+	'settings.title': 'Academic Dashboard settings',
+	'settings.intro': 'Configure presentation, safe local actions, optional integrations, and the Claudian handoff boundary. Settings never edit Vault notes.',
+	'write.preview': 'Review change',
+	'write.confirm': 'Confirm one change',
+	'write.undo': 'Undo',
+	'write.conflict': 'The note changed. Nothing was overwritten.',
+	'write.createPath': 'Vault-relative path',
+	'write.createContent': 'Content preview',
+});
+
+export type LocaleResourceKey = keyof typeof ENGLISH_RESOURCES;
+export type LocaleResources = Readonly<Record<LocaleResourceKey, string>>;
+export type InterpolationValues = Readonly<Record<string, string | number>>;
+
+export const SIMPLIFIED_CHINESE_RESOURCES: LocaleResources = Object.freeze({
+	'app.name': '学术仪表盘',
+	'nav.pages': '仪表盘页面',
+	'nav.home': '主页',
+	'nav.study': '学习',
+	'nav.research': '研究',
+	'nav.agent': '智能体',
+	'nav.openHome': '打开主页',
+	'nav.openStudy': '打开学习页',
+	'nav.openResearch': '打开研究页',
+	'nav.openAgent': '打开智能体页',
+	'nav.homeWidgets': '主页小组件',
+	'nav.studyWidgets': '学习页小组件',
+	'nav.researchWidgets': '研究页小组件',
+	'nav.agentWidgets': '智能体页小组件',
+	'layout.edit': '编辑布局',
+	'layout.done': '完成',
+	'layout.reset': '重置布局',
+	'layout.resetCurrent': '重置当前页面布局',
+	'layout.editingOff': '布局编辑已关闭。',
+	'layout.updated': '布局已更新，改动会自动保存。',
+	'layout.instructions': '布局编辑已开启。拖动卡片可移动，拖动右下角手柄可调整大小；也可用方向键移动，按住 Shift 加方向键调整大小。完成后按 Escape。',
+	'layout.widen': '请加宽仪表盘以编辑标准四栏布局。',
+	'layout.widget': '{title} 小组件',
+	'layout.widgetInstructions': '{title} 小组件。使用方向键移动，按住 Shift 加方向键调整大小。',
+	'layout.widgetWiden': '{title} 小组件。请加宽仪表盘以编辑标准布局。',
+	'page.home.description': '从清晰的一步开始今天。',
+	'page.study.description': '查看学习活动和需要关注的事项。',
+	'page.research.description': '随时掌握当前阅读与研究笔记。',
+	'page.agent.description': '通过 Claudian 启动审慎的工作流。',
+	'widget.loading': '正在加载…',
+	'widget.dateTime': '日期与时间',
+	'widget.dailyQuote': '每日一句',
+	'widget.commands': '命令',
+	'widget.calendar': '日历',
+	'widget.todayTasks': '今日任务',
+	'widget.recentNotes': '最近笔记',
+	'widget.quickLinks': '快捷链接',
+	'widget.reviewQueue': '复习队列',
+	'widget.obsidianActivity': 'Obsidian 活动',
+	'widget.githubContributions': 'GitHub 贡献',
+	'widget.recentPapers': '最近论文',
+	'widget.agentStatus': '智能体状态',
+	'widget.agentHandoff': '智能体交接',
+	'widget.approvedWorkflows': '已批准的工作流',
+	'empty.quickLinks': '尚未配置快捷链接。',
+	'empty.commands': '尚未配置命令。',
+	'empty.quotes': '尚未配置本地引文。',
+	'empty.nativeTasks': '今天没有到期的原生 Markdown 任务。',
+	'empty.tasksPlugin': '今天没有到期的 Tasks 插件任务。',
+	'empty.nativeReviews': '没有到期的原生 Markdown 复习或闪卡。',
+	'empty.spacedRepetition': '没有到期的 Spaced Repetition 项目。',
+	'empty.papers': '没有论文笔记符合当前元数据映射和筛选条件。',
+	'source.nativeMarkdown': '原生 Markdown 后备来源',
+	'common.save': '保存',
+	'common.reset': '重置',
+	'common.refresh': '刷新',
+	'common.undo': '撤销',
+	'common.unavailable': '不可用',
+	'agent.openClaudian': '打开 Claudian',
+	'agent.prepare': '准备交接',
+	'agent.preparing': '正在准备…',
+	'agent.reviewBoundary': '请求只会准备好供审阅，绝不会自动发送。',
+	'agent.readOnly': '只读',
+	'agent.reviewBeforeWrite': '写入前审阅',
+	'agent.selectedTarget': '已选智能体目标',
+	'agent.workflow': '智能体工作流',
+	'agent.optionalFocus': '可选的重点或限制（此处不保存笔记内容）',
+	'agent.readOnlyBoundary': '只读：结果保留在 Claudian 对话中。',
+	'agent.writeBoundary': '拟议写入：Claudian 必须展示计划或差异并等待批准。',
+	'agent.continue': '在 Claudian 中继续对话并管理目标设置。',
+	'agent.providerBoundary': 'Provider、Model、身份验证和权限仍由 Claudian 与所选智能体管理。',
+	'agent.preferenceLabel': '仪表盘记住的偏好',
+	'agent.preferenceHelp': '发送前请在 Claudian 中确认此目标。',
+	'agent.statusReady': 'Claudian 交接可供审阅。',
+	'agent.versionStatus': 'Claudian {version} · 已验证交接',
+	'agent.selectedConfirm': '已选择 {target}。请在 Claudian 中确认同一目标。',
+	'agent.workflowLabel': '工作流',
+	'agent.focusLabel': '重点或限制',
+	'agent.dailyRoutingFocus': '可选的整理规则、要包含的标题，或需要保留在每日笔记中的内容',
+	'agent.dailyRoutingMissing': '今天配置的每日笔记尚不存在。请先从主页日历创建。',
+	'workflow.organize': '整理并润色当前笔记',
+	'workflow.summarize': '总结当前笔记',
+	'workflow.repair': '检查并修复 Markdown',
+	'workflow.answer': '搜索 Vault 并回答',
+	'workflow.dailyOrganize': '整理今日笔记到学术笔记',
+	'workflow.course': '创建课程笔记',
+	'workflow.paper': '创建论文阅读笔记',
+	'filter.reviews': '筛选复习项目',
+	'filter.allReviews': '全部复习项目',
+	'filter.notes': '笔记',
+	'filter.flashcards': '闪卡',
+	'filter.papers': '筛选论文',
+	'filter.allStatuses': '全部状态',
+	'filter.unread': '未读',
+	'filter.reading': '阅读中',
+	'filter.reviewed': '已复习',
+	'filter.unspecified': '未指定',
+	'filter.year': '年份',
+	'filter.reviewSearchAria': '按笔记名称或路径筛选复习队列',
+	'filter.reviewKindAria': '按项目类型筛选复习队列',
+	'filter.paperSearchAria': '按标题、作者、发表场所或 DOI 筛选论文',
+	'filter.paperStatusAria': '按阅读状态筛选论文',
+	'filter.paperYearAria': '按发表年份筛选论文',
+	'review.note': '笔记复习',
+	'research.openPaper': '打开论文笔记：{title}',
+	'research.setStatusGroup': '设置 {title} 的阅读状态',
+	'research.setStatus': '将 {title} 的状态设为 {status}',
+	'research.addFavorite': '将 {title} 加入收藏',
+	'research.removeFavorite': '将 {title} 移出收藏',
+	'research.addFavoriteButton': '加入收藏',
+	'research.removeFavoriteButton': '取消收藏',
+	'calendar.newCourse': '新建课程笔记',
+	'calendar.newPaper': '新建论文笔记',
+	'calendar.currentMonth': '当前月份日历',
+	'calendar.openDaily': '打开 {date} 的日记',
+	'calendar.reviewDaily': '审阅 {date} 日记的创建内容',
+	'activity.publicCount': '此时间段内有 {count} 次公开贡献',
+	'activity.noteCount': '此时间段内修改了 {count} 篇笔记',
+	'activity.heatmap': '{source} 本地活动：{days} 天内共 {count} 次贡献。',
+	'activity.legend': '活动强度，从较少贡献到较多贡献',
+	'activity.less': '少',
+	'activity.more': '多',
+	'activity.lastUpdated': '最后更新于 {date}。',
+	'activity.noUpdate': '尚无成功更新。',
+	'activity.stale': '数据已过期；正在显示最近一次有效缓存。',
+	'activity.fresh': '数据为最新。',
+	'activity.privateCount': '{count} 次匿名私有贡献。',
+	'activity.refreshError': '刷新错误：{code}。',
+	'settings.cacheSummary': '{count} 条标准化日期记录。最后更新于 {date}，六小时内有效。',
+	'settings.retainedLogs': '保留 {count} 条。日志只包含工作流、智能体、受影响路径、结果和最小错误代码，绝不包含提示词、笔记内容或凭据。',
+	'settings.githubConfigured': '已配置于 Obsidian SecretStorage。仅在启用匿名私有贡献计数时使用 read:user；绝不需要仓库范围。',
+	'settings.githubNotConfigured': '尚未配置。仅在启用匿名私有贡献计数时使用 read:user；绝不需要仓库范围。',
+	'settings.cacheEmpty': '没有贡献缓存数据。Secret 引用：{reference}。',
+	'settings.templateSettings': '{label}模板设置',
+	'settings.layoutName': '{page}布局',
+	'settings.layoutRestore': '恢复{page}的默认固定大小布局。',
+	'settings.defaultPage': '默认页面',
+	'settings.defaultPageDesc': '新仪表盘视图打开时显示的页面。',
+	'settings.agentHandoff': '智能体交接',
+	'settings.selectedAgent': '所选智能体',
+	'settings.github': 'GitHub 贡献',
+	'settings.personalAccessToken': '个人访问令牌',
+	'settings.saveSecurely': '安全保存',
+	'settings.widgetVisibility': '小组件可见性',
+	'settings.metadata': '学术元数据',
+	'settings.paperActions': '研究论文操作',
+	'settings.templates': '学术笔记模板',
+	'settings.quickLinks': '快捷链接',
+	'settings.quotes': '本地引文',
+	'settings.layoutReset': '布局重置',
+	'settings.agentConfiguration': '智能体配置',
+	'settings.title': '学术仪表盘设置',
+	'settings.intro': '配置界面、安全的本地操作、可选集成与 Claudian 交接边界。设置本身绝不会编辑 Vault 笔记。',
+	'write.preview': '审阅更改',
+	'write.confirm': '确认单项更改',
+	'write.undo': '撤销',
+	'write.conflict': '笔记已被修改，未覆盖任何内容。',
+	'write.createPath': 'Vault 相对路径',
+	'write.createContent': '内容预览',
+});
+
+let activeLocale: SupportedLocale = 'en';
+
+export function resolveLocale(mode: LocaleMode, obsidianLocale: string): SupportedLocale {
+	if (mode !== 'auto') return mode;
+	return obsidianLocale.toLocaleLowerCase().startsWith('zh') ? 'zh-CN' : 'en';
+}
+
+export function configureLocalization(obsidianLocale: string): SupportedLocale {
+	activeLocale = resolveLocale('auto', obsidianLocale);
+	return activeLocale;
+}
+
+export function currentLocale(): SupportedLocale {
+	return activeLocale;
+}
+
+function interpolate(message: string, values: InterpolationValues): string {
+	return message.replace(/\{([a-zA-Z][a-zA-Z0-9]*)\}/g, (match, name: string) =>
+		Object.prototype.hasOwnProperty.call(values, name) ? String(values[name]) : match,
+	);
+}
+
+export function translate(
+	locale: SupportedLocale,
+	key: LocaleResourceKey,
+	resources: Partial<Record<LocaleResourceKey, string>> = {},
+	values: InterpolationValues = {},
+): string {
+	const message = resources[key] ??
+		(locale === 'zh-CN' ? SIMPLIFIED_CHINESE_RESOURCES[key] : undefined) ??
+		ENGLISH_RESOURCES[key];
+	return interpolate(message, values);
+}
+
+export function t(
+	key: LocaleResourceKey,
+	values: InterpolationValues = {},
+): string {
+	return translate(activeLocale, key, {}, values);
+}
+
+const RESOURCE_KEY_BY_ENGLISH = new Map<string, LocaleResourceKey>(
+	Object.entries(ENGLISH_RESOURCES).map(([key, value]) => [
+		value,
+		key as LocaleResourceKey,
+	]),
+);
+
+const SIMPLIFIED_CHINESE_SOURCE_RESOURCES: Readonly<Record<string, string>> = Object.freeze({
+	'GitHub contributions are not configured.': '尚未配置 GitHub 贡献。',
+	'Add a PAT in Academic Dashboard settings. It is stored only in Obsidian SecretStorage.': '请在学术仪表盘设置中添加 PAT；它只会存储在 Obsidian SecretStorage 中。',
+	'Tasks is not installed; using Native Markdown tasks.': '未安装 Tasks；正在使用原生 Markdown 任务。',
+	'Tasks does not expose a compatible read API; using Native Markdown tasks.': 'Tasks 未提供兼容的读取 API；正在使用原生 Markdown 任务。',
+	'Spaced Repetition is not installed; using Native Markdown review markers.': '未安装 Spaced Repetition；正在使用原生 Markdown 复习标记。',
+	'Spaced Repetition does not expose a compatible read API; using Native Markdown review markers.': 'Spaced Repetition 未提供兼容的读取 API；正在使用原生 Markdown 复习标记。',
+	'Page shown when a new dashboard view opens.': '新仪表盘视图打开时显示的页面。',
+	'Dashboard remembers this target. Confirm it in the agent view before sending a prepared workflow.': '仪表盘会记住所选目标。发送准备好的工作流前，请在智能体视图中确认同一目标。',
+	'Agent write-log retention': '智能体写入日志保留期',
+	'Days to retain minimal write-handoff metadata. Default: 30.': '保留最小写入交接元数据的天数，默认为 30 天。',
+	'Recorded write handoffs': '已记录的写入交接',
+	'GitHub contributions': 'GitHub 贡献',
+	'Personal access token': '个人访问令牌',
+	'Paste access token to replace the stored secret': '粘贴访问令牌以替换已存储的密钥',
+	'Save securely': '安全保存',
+	'Anonymous private contribution count': '匿名私有贡献计数',
+	'Explicit opt-in. Requires read:user. Dashboard never requests repository scope or private repository names.': '需要明确选择加入，并要求 read:user。仪表盘绝不会请求仓库范围或私有仓库名称。',
+	'Contribution cache': '贡献缓存',
+	'Widget visibility': '小组件可见性',
+	'Academic metadata': '学术元数据',
+	'Map Academic Dashboard concepts to your existing frontmatter properties. These recommendations only control how the dashboard reads notes; saving them does not edit or migrate any Vault note.': '将学术仪表盘概念映射到现有 frontmatter 属性。这些建议只控制仪表盘如何读取笔记；保存设置不会编辑或迁移任何 Vault 笔记。',
+	'Note type field': '笔记类型字段',
+	'Identifies the kind of note.': '用于识别笔记类型。',
+	'Course field': '课程字段',
+	'Course name or code.': '课程名称或代码。',
+	'Term field': '学期字段',
+	'Academic term or semester.': '学年或学期。',
+	'Date field': '日期字段',
+	'Course-note date.': '课程笔记日期。',
+	'Paper title field': '论文标题字段',
+	'Paper title.': '论文标题。',
+	'Authors field': '作者字段',
+	'Paper authors.': '论文作者。',
+	'Publication year field': '发表年份字段',
+	'Paper publication year.': '论文发表年份。',
+	'Reading status field': '阅读状态字段',
+	'Unread, reading, or reviewed.': '未读、阅读中或已复习。',
+	'Venue field': '发表场所字段',
+	'Journal, conference, or venue.': '期刊、会议或发表场所。',
+	'DOI field': 'DOI 字段',
+	'Digital object identifier.': '数字对象标识符。',
+	'Tags field': '标签字段',
+	'Vault tags for the note.': '笔记的 Vault 标签。',
+	'Course-note type value': '课程笔记类型值',
+	'Recommended default: course-note': '建议默认值：course-note',
+	'Paper type value': '论文类型值',
+	'Recommended default: paper': '建议默认值：paper',
+	'Metadata mapping': '元数据映射',
+	'Save all field and type-value mappings together.': '一并保存所有字段和类型值映射。',
+	'Use recommended': '使用建议值',
+	'Research paper actions': '研究论文操作',
+	'Status write field': '状态写入字段',
+	'One top-level scalar with only unread, reading, or reviewed. This must match the metadata reading status field.': '一个顶层标量，仅可为 unread、reading 或 reviewed，且必须与元数据阅读状态字段一致。',
+	'Favorite write field': '收藏写入字段',
+	'One top-level YAML boolean true or false. Missing is treated as false and inserted only into otherwise safe existing frontmatter.': '一个顶层 YAML 布尔值 true 或 false。缺失时按 false 处理，仅在其他结构安全的现有 frontmatter 中插入。',
+	'Paper write mapping': '论文写入映射',
+	'Clicks update one existing paper and one mapped field. Complex, duplicated, malformed, or stale frontmatter stays unchanged.': '每次点击只更新一篇现有论文的一个映射字段。复杂、重复、格式错误或过期的 frontmatter 保持不变。',
+	'Academic note templates': '学术笔记模板',
+	'Use editable Dashboard templates or select existing Markdown templates in this Vault. Creation commands make one new note and never overwrite an existing path.': '使用可编辑的仪表盘模板，或选择此 Vault 中已有的 Markdown 模板。创建命令只新建一篇笔记，绝不会覆盖现有路径。',
+	'Course note': '课程笔记',
+	'Paper-reading note': '论文阅读笔记',
+	'Template source': '模板来源',
+	'Choose editable dashboard text or an existing vault Markdown file.': '选择可编辑的仪表盘文本或现有 Vault Markdown 文件。',
+	'Editable dashboard template': '可编辑的仪表盘模板',
+	'Vault Markdown template': 'Vault Markdown 模板',
+	'Editable template': '可编辑模板',
+	'Used when the source is editable dashboard template.': '来源为可编辑仪表盘模板时使用。',
+	'Vault template path': 'Vault 模板路径',
+	'Required for vault source, for example templates/course-note.md.': 'Vault 来源必填，例如 templates/course-note.md。',
+	'Destination folder': '目标文件夹',
+	'Vault-relative folder for newly created notes.': '新建笔记使用的 Vault 相对文件夹。',
+	'Save source, template, and destination together.': '一并保存来源、模板和目标位置。',
+	'Use default': '使用默认值',
+	'Quick links': '快捷链接',
+	'Vault paths': 'Vault 路径',
+	'One per line: Label | relative/vault/path': '每行一项：标签 | Vault/相对路径',
+	'Local quotes': '本地引文',
+	'Quote file': '引言文件',
+	'A vault-relative Markdown file. Each non-empty, non-heading line is one quote, up to 366 entries.': 'Vault 内的相对 Markdown 路径。每个非空、非标题行视为一条引言，最多读取 366 条。',
+	'Open file': '打开文件',
+	'Fallback quote entries': '备用引言条目',
+	'Used only when no quote file path is configured. One local quote per line; no network service is used.': '仅在未配置引言文件时使用。每行一条本地引言，不使用网络服务。',
+	'Daily quote entries': '每日引文条目',
+	'One local quote per line. No network service is used.': '每行一条本地引文，不使用网络服务。',
+	'Layout reset': '布局重置',
+	'All dashboard layouts': '全部仪表盘布局',
+	'Restore defaults for home, study, research, and agent.': '恢复主页、学习、研究和智能体页面的默认布局。',
+	'Reset all': '全部重置',
+	'Agent configuration': '智能体配置',
+	'Provider and model configuration remains in': 'Provider 和 Model 配置仍由',
+	'. Academic Dashboard does not store API keys or Agent credentials.': '管理。学术仪表盘不会存储 API 密钥或智能体凭据。',
+});
+
+/** Translate legacy source copy while callers are migrated to semantic keys. */
+export function translateEnglishSource(source: string): string {
+	const key = RESOURCE_KEY_BY_ENGLISH.get(source);
+	if (key) return t(key);
+	return activeLocale === 'zh-CN'
+		? SIMPLIFIED_CHINESE_SOURCE_RESOURCES[source] ?? source
+		: source;
+}
+
+export function localizeElementTree(root: HTMLElement): void {
+	const document = root.ownerDocument;
+	const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+	let node = walker.nextNode();
+	while (node) {
+		const value = node.nodeValue;
+		if (value?.trim()) {
+			const leading = value.match(/^\s*/)?.[0] ?? '';
+			const trailing = value.match(/\s*$/)?.[0] ?? '';
+			const translated = translateEnglishSource(value.trim());
+			if (translated !== value.trim()) node.nodeValue = `${leading}${translated}${trailing}`;
+		}
+		node = walker.nextNode();
+	}
+	for (const element of Array.from(root.querySelectorAll<HTMLElement>('*'))) {
+		for (const attribute of ['aria-label', 'placeholder', 'title'] as const) {
+			const value = element.getAttribute(attribute);
+			if (!value) continue;
+			const translated = translateEnglishSource(value);
+			if (translated !== value) element.setAttribute(attribute, translated);
+		}
+	}
+}
+
+export function formatDate(
+	value: Date | number,
+	options: Intl.DateTimeFormatOptions,
+): string {
+	return new Intl.DateTimeFormat(activeLocale, options).format(value);
+}
+
+export function formatNumber(value: number): string {
+	return new Intl.NumberFormat(activeLocale).format(value);
+}
+
+export function formatCount(
+	value: number,
+	one: string,
+	other: string,
+): string {
+	const category = new Intl.PluralRules(activeLocale).select(value);
+	return interpolate(category === 'one' ? one : other, {
+		count: formatNumber(value),
+	});
+}

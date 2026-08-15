@@ -1,0 +1,42 @@
+{
+	"name": "academic-dashboard",
+	"version": "0.2.0",
+	"private": true,
+	"description": "Academic Dashboard plugin for Obsidian: a calm, widget-based academic workspace.",
+	"main": "main.js",
+	"type": "module",
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"scripts": {
+		"check:release": "node ../scripts/check-release.mjs",
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"typecheck": "tsc -noEmit -skipLibCheck",
+		"lint": "eslint .",
+		"test": "vitest run"
+	},
+	"keywords": [
+		"obsidian",
+		"obsidian-plugin",
+		"dashboard",
+		"academic"
+	],
+	"license": "MIT",
+	"devDependencies": {
+		"@eslint/js": "^9.39.4",
+		"@types/node": "^22.15.17",
+		"esbuild": "0.25.5",
+		"eslint": "^9.39.4",
+		"eslint-plugin-obsidianmd": "^0.4.1",
+		"globals": "^17.6.0",
+		"jiti": "^2.6.1",
+		"obsidian": "latest",
+		"typescript": "^5.8.3",
+		"typescript-eslint": "^8.59.1",
+		"vitest": "3.2.7"
+	},
+	"dependencies": {
+		"gridstack": "13.0.2"
+	}
+}

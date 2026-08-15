@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible Academic Dashboard problem without private Vault data.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Never include API keys, tokens, private note content, Agent transcripts, full local paths, or unredacted data.json.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Academic Dashboard, Obsidian, operating system, and relevant optional plugin versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic Vault data and list exact steps, expected result, and actual result.
+    validations:
+      required: true
+  - type: textarea
+    id: fallback
+    attributes:
+      label: Availability or fallback state
+      description: Copy only the non-sensitive status/error code shown by the Dashboard.

@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a scoped Dashboard improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include keyboard, fallback, privacy, and write-safety expectations.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Architecture boundary
+      options:
+        - label: This proposal keeps Claudian as the only Agent execution core.
+          required: true
