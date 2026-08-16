@@ -40,6 +40,13 @@ structure and Semantic Versioning.
 - Tasks-plugin results stay read-only unless the adapter uses the verifiable
   Native Markdown fallback; no private Community Plugin write API is called.
 
+### Fixed
+
+- Claudian course, paper, and book creation handoffs now receive a single path
+  resolved by Dashboard through Obsidian's Vault API. They no longer deadlock by
+  requiring a recursive scan while Shell access is forbidden, and Dashboard
+  stops before handoff on an ambiguous or existing destination.
+
 ### Security
 
 - Research actions bind to the list-observed scalar and mapped paper identity,

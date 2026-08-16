@@ -232,9 +232,12 @@ the request in Claudian.
 The eighth workflow creates a book-reading note and joins the course/paper
 creation workflows in a `direct-write` boundary. The user still verifies the
 target and presses Send because Claudian 2.1.3 cannot be submitted through its
-public cross-plugin interface. After Send, these three prompts perform the same
-related-material path preflight and authorize exactly one new Markdown note
-(plus at most one title-named folder) without a second plan/diff approval.
+public cross-plugin interface. Before the handoff opens, Dashboard performs the
+same related-material path preflight through Obsidian's Vault API and supplies
+one resolved Markdown path to Claudian. The target must not repeat that scan or
+request a directory listing/Shell permission. After Send, these three prompts
+authorize exactly one new Markdown note (plus only the parent folder required
+by the resolved path) without a second plan/diff approval.
 Existing-note and multi-note writes remain `proposed-write` and review-first.
 
 ### Conservative local write contract

@@ -43,6 +43,13 @@ export interface NoteCreationPreview {
 	readonly prepared: CreationWritePreview;
 }
 
+export interface AgentNoteCreationPreparation {
+	readonly path: string;
+	readonly destination: string;
+	readonly templatePath?: string;
+	readonly templateContent?: string;
+}
+
 export class NoteCreationError extends Error {
 	constructor(
 		readonly code:
@@ -191,22 +198,84 @@ export class NoteTemplateService {
 		return this.confirm(await this.preview(request));
 	}
 
+	async prepareAgentCreation(
+		request: NoteCreationRequest,
+	): Promise<AgentNoteCreationPreparation> {
+		const resolved = await this.resolveCreation(request);
+		return Object.freeze({
+			path: resolved.path,
+			destination: resolved.setting.destinationFolder,
+			...(resolved.setting.source === 'vault'
+				? { templatePath: resolved.setting.vaultTemplatePath }
+				: {
+					templateContent: renderTemplate(
+						resolved.setting.customTemplate,
+						templateValues(resolved.title, this.now(), this.getMetadata()),
+					),
+				}),
+		});
+	}
+
 	async preview(request: NoteCreationRequest): Promise<NoteCreationPreview> {
+		const resolved = await this.resolveCreation(request);
+		const source = await this.resolveTemplate(resolved.setting);
+		const content = renderTemplate(
+			source,
+			templateValues(resolved.title, this.now(), this.getMetadata()),
+		);
+
+		try {
+			const prepared = await this.writes.prepareCreation({
+				operation: operationForKind(request.kind),
+				path: resolved.path,
+				content,
+			});
+			return Object.freeze({
+				path: resolved.path,
+				content,
+				contentFingerprint: prepared.afterFingerprint,
+				prepared,
+			});
+		} catch (error) {
+			throw this.creationError(error, resolved.path);
+		}
+	}
+
+	private async resolveCreation(request: NoteCreationRequest): Promise<{
+		readonly title: string;
+		readonly setting: NoteTemplateSetting;
+		readonly path: string;
+	}> {
 		const title = validateTitle(request.title);
-		const settings = this.getTemplates();
-		const template = settingForKind(settings, request.kind);
-		if (!isSafeVaultRelativePath(template.destinationFolder)) {
+		const setting = settingForKind(this.getTemplates(), request.kind);
+		if (!isSafeVaultRelativePath(setting.destinationFolder)) {
 			throw new NoteCreationError(
 				'invalid_destination',
 				'The configured destination folder is not a safe Vault-relative path.',
 			);
 		}
-		let destinationFolder: string;
 		try {
-			destinationFolder = await this.resolveDestinationFolder(
-				template.destinationFolder,
+			const entries = await this.port.listDescendants(setting.destinationFolder);
+			const destinationFolder = this.resolveDestinationFolder(
+				setting.destinationFolder,
 				title,
+				entries,
 			);
+			const path = `${destinationFolder}/${title}.md`;
+			const pathKey = path.normalize('NFKC').toLocaleLowerCase();
+			if (
+				entries.some(
+					(entry) =>
+						entry.kind === 'file' &&
+						entry.path.normalize('NFKC').toLocaleLowerCase() === pathKey,
+				)
+			) {
+				throw new NoteCreationError(
+					'note_exists',
+					`A note already exists at ${path}. Nothing was overwritten.`,
+				);
+			}
+			return Object.freeze({ title, setting, path });
 		} catch (error) {
 			if (error instanceof NoteCreationError) throw error;
 			throw new NoteCreationError(
@@ -214,39 +283,18 @@ export class NoteTemplateService {
 				'The destination folder could not be inspected safely.',
 			);
 		}
-		const path = `${destinationFolder}/${title}.md`;
-		const source = await this.resolveTemplate(template);
-		const content = renderTemplate(
-			source,
-			templateValues(title, this.now(), this.getMetadata()),
-		);
-
-		try {
-			const prepared = await this.writes.prepareCreation({
-				operation: operationForKind(request.kind),
-				path,
-				content,
-			});
-			return Object.freeze({
-				path,
-				content,
-				contentFingerprint: prepared.afterFingerprint,
-				prepared,
-			});
-		} catch (error) {
-			throw this.creationError(error, path);
-		}
 	}
 
-	private async resolveDestinationFolder(
+	private resolveDestinationFolder(
 		baseFolder: string,
 		title: string,
-	): Promise<string> {
+		entries: readonly NoteDestinationEntry[],
+	): string {
 		const titleKey = relatedNameKey(title);
 		if (relatedNameKey(baseFolder.split('/').at(-1) ?? '') === titleKey) {
 			return baseFolder;
 		}
-		const scored = (await this.port.listDescendants(baseFolder))
+		const scored = entries
 			.map((entry) => ({ entry, score: relatedScore(entry, titleKey) }))
 			.filter(
 				(candidate): candidate is { entry: NoteDestinationEntry; score: number } =>

@@ -98,6 +98,7 @@ describe('ClaudianWorkflowAdapter', () => {
 			target: 'codex',
 			userInput: 'The Pragmatic Programmer',
 			requestedDestination: 'Reading',
+			resolvedNotePath: 'Reading/The Pragmatic Programmer/The Pragmatic Programmer.md',
 		});
 
 		expect(result).toMatchObject({
@@ -105,6 +106,7 @@ describe('ClaudianWorkflowAdapter', () => {
 			requiresTargetConfirmation: true,
 		});
 		expect(result.message).toContain('press Send');
+		expect(result.message).toContain('Dashboard path checks passed');
 		expect(result.message).toContain('without another approval');
 	});
 

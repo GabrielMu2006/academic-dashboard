@@ -77,8 +77,9 @@ The first workflows are:
 
 Each request contains only the needed context: selected workflow, a validated
 Vault-relative current-note path when applicable, a bounded user question or
-focus, a template reference/destination when relevant, and explicit safety
-scope. Dashboard never reads a note body merely to prepare the request.
+focus, a template reference or rendered Dashboard-owned template when relevant,
+and explicit safety scope. Dashboard never reads an ordinary note body merely
+to prepare the request.
 
 The Daily Note routing workflow resolves today's note from **Settings →
 Academic Dashboard → Daily Note creation**. It uses the configured academic
@@ -88,14 +89,16 @@ stays in the Daily Note, the source is not edited, and one run is limited to ten
 existing targets. The user still verifies the selected Agent, sends the request,
 and approves the proposed changes in Claudian.
 
-The three new-note workflows are narrower. Claudian recursively checks the
-configured `Course`, `Paper`, or `Reading` root for a related folder or file,
-then creates exactly one note in the one clear directory, or in a new
-title-named folder when nothing matches. Competing destinations stop the run;
-existing files are never moved, changed, or overwritten. Pressing Send is the
-user's authorization for that single creation, so Claudian must not request a
-second plan/diff approval. Dashboard cannot press Send through the Claudian
-2.1.3 public boundary.
+The three new-note workflows are narrower. Before opening Claudian, Dashboard
+uses Obsidian's Vault API to recursively check the configured `Course`, `Paper`,
+or `Reading` root for a related folder or file and resolves one exact new-note
+path. Competing destinations, invalid titles, and an existing target stop before
+handoff. Claudian receives that resolved path and must not repeat the directory
+scan, ask the user for a file listing, or request Shell permission. Existing
+files are never moved, changed, or overwritten. Pressing Send is the user's
+authorization for that single creation, so Claudian must not request a second
+plan/diff approval. Dashboard cannot press Send through the Claudian 2.1.3
+public boundary.
 
 ### Claudian 2.1.3 compatibility contract
 

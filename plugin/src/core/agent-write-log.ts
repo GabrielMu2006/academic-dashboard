@@ -133,7 +133,7 @@ export function agentWriteLogEntryForHandoff(
 	if (getAgentWorkflow(request.workflowId).access === 'read-only') return null;
 	const affectedPaths = [
 		request.currentNotePath,
-		request.requestedDestination,
+		request.resolvedNotePath ?? request.requestedDestination,
 	].filter((path): path is string => Boolean(path));
 	const candidate = {
 		timestamp: now.toISOString(),

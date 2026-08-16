@@ -95,9 +95,15 @@ Claudian, review the prompt, then press Send yourself. Dashboard cannot report
 running/completed/failed Agent execution without a supported Claudian signal.
 
 For course, paper, or book creation, press Send once after checking the target.
-That workflow is instructed to run its path preflight and create one note
+Dashboard has already run the path preflight through Obsidian before the request
+appears in Claudian. The Agent receives one resolved note path and creates it
 without asking for another plan/diff confirmation. Other write workflows still
 pause for review before modifying existing notes.
+
+If an older handoff says it cannot scan the folder without Shell access, update
+Academic Dashboard and prepare the request again. Do not provide a recursive
+Vault listing and do not enable Shell merely to work around that message; current
+handoffs perform the scan natively before Claudian opens.
 
 ## Academic note creation reports an ambiguous destination
 

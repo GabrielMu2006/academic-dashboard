@@ -331,19 +331,25 @@ export default class AcademicDashboardPlugin extends Plugin {
 			},
 			academicMetadata: () =>
 				this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
-			creationContext: (workflowId) => {
-				const templates =
-					this.layoutStore?.getTemplateSettings() ?? restored.settings.templates;
-				const setting = workflowId === 'create-course-note'
-					? templates.courseNote
+			creationContext: async (workflowId, title) => {
+				const kind = workflowId === 'create-course-note'
+					? 'course-note'
 					: workflowId === 'create-paper-reading-note'
-						? templates.paperReading
-						: templates.bookReading;
+						? 'paper-reading'
+						: 'book-reading';
+				const preparation = await noteTemplates.prepareAgentCreation({
+					kind,
+					title,
+				});
 				return {
-					...(setting.source === 'vault' && setting.vaultTemplatePath
-						? { templatePath: setting.vaultTemplatePath }
+					destination: preparation.destination,
+					resolvedPath: preparation.path,
+					...(preparation.templatePath
+						? { templatePath: preparation.templatePath }
 						: {}),
-					destination: setting.destinationFolder,
+					...(preparation.templateContent
+						? { templateContent: preparation.templateContent }
+						: {}),
 				};
 			},
 			onHandoff: (request, result) => {

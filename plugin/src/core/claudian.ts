@@ -31,7 +31,9 @@ export interface AgentWorkflowRequest {
 	readonly currentNotePath?: string;
 	readonly userInput?: string;
 	readonly templatePath?: string;
+	readonly templateContent?: string;
 	readonly requestedDestination?: string;
+	readonly resolvedNotePath?: string;
 	readonly academicMetadata?: MetadataSettings;
 }
 

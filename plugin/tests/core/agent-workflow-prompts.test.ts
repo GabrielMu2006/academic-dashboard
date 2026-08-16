@@ -37,6 +37,7 @@ const REQUESTS: readonly AgentWorkflowRequest[] = [
 		userInput: 'Algorithms — Week 3',
 		templatePath: 'Templates/Course.md',
 		requestedDestination: 'Course',
+		resolvedNotePath: 'Course/Algorithms — Week 3/Algorithms — Week 3.md',
 	},
 	{
 		workflowId: 'create-paper-reading-note',
@@ -44,12 +45,15 @@ const REQUESTS: readonly AgentWorkflowRequest[] = [
 		userInput: 'Attention Is All You Need',
 		templatePath: 'Templates/Paper.md',
 		requestedDestination: 'Paper',
+		resolvedNotePath: 'Paper/Attention Is All You Need/Attention Is All You Need.md',
 	},
 	{
 		workflowId: 'create-book-reading-note',
 		target: 'codex',
 		userInput: 'Designing Data-Intensive Applications',
+		templateContent: '# Designing Data-Intensive Applications\n',
 		requestedDestination: 'Reading',
+		resolvedNotePath: 'Reading/Designing Data-Intensive Applications/Designing Data-Intensive Applications.md',
 	},
 ];
 
@@ -90,11 +94,17 @@ describe('Agent workflow prompts', () => {
 		);
 		for (const request of REQUESTS.slice(5)) {
 			const prompt = buildAgentWorkflowPrompt(request);
-			expect(prompt).toContain('Search recursively inside the requested destination folder');
-			expect(prompt).toContain('If matches point to more than one folder, stop');
+			expect(prompt).toContain('completed the required recursive path preflight through the Obsidian Vault API');
+			expect(prompt).toContain('The one resolved new-note path is');
+			expect(prompt).toContain('Do not repeat the directory scan');
+			expect(prompt).toContain('request a recursive file listing');
+			expect(prompt).toContain('ask for Shell permission');
 			expect(prompt).toContain('Do not show another plan or diff');
 			expect(prompt).toContain('without requesting another approval');
 		}
+		expect(buildAgentWorkflowPrompt(REQUESTS[7]!)).toContain(
+			'<markdown-template>\n# Designing Data-Intensive Applications',
+		);
 	});
 
 	it('rejects Daily Note routing without a safe source or metadata mapping', () => {
@@ -141,6 +151,7 @@ describe('Agent workflow prompts', () => {
 				target: 'codex',
 				userInput: 'Course',
 				requestedDestination: '../outside',
+				resolvedNotePath: 'Course/Course/Course.md',
 			}),
 		).toThrow('visible Vault content');
 		expect(() =>
@@ -150,5 +161,22 @@ describe('Agent workflow prompts', () => {
 				userInput: 'Book',
 			}),
 		).toThrow('requires a visible Vault-relative destination root');
+		expect(() =>
+			buildAgentWorkflowPrompt({
+				workflowId: 'create-book-reading-note',
+				target: 'codex',
+				userInput: 'Book',
+				requestedDestination: 'Reading',
+			}),
+		).toThrow('requires a Dashboard-resolved note path');
+		expect(() =>
+			buildAgentWorkflowPrompt({
+				workflowId: 'create-book-reading-note',
+				target: 'codex',
+				userInput: 'Book',
+				requestedDestination: 'Reading',
+				resolvedNotePath: 'Paper/Book/Book.md',
+			}),
+		).toThrow('must stay inside the requested destination');
 	});
 });
