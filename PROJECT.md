@@ -75,9 +75,21 @@ status: unread # unread | reading | reviewed
 venue: ""
 doi: ""
 tags: []
+
+# book-reading note
+type: book-note
+title: ""
+authors: []
+status: reading
+date: 2026-08-11
+tags: []
 ```
 
-V1 includes editable default templates for course notes and paper-reading notes. Users may point to their own templates or customize the bundled defaults.
+V1 includes editable default templates for course notes, paper-reading notes,
+and book-reading notes. Users may point to their own templates or customize the
+bundled defaults. Creation searches the configured root for a related folder or
+file before choosing a path; no-match creation uses a title-named folder, while
+ambiguous destinations and existing targets fail closed.
 
 ## Agent workflows
 
@@ -89,6 +101,8 @@ Offer structured entry points that pass context to Claudian, while allowing the 
 4. Search the full Vault and answer a question
 5. Create a course note
 6. Create a paper-reading note
+7. Organize today's Daily Note into existing academic notes
+8. Create a book-reading note
 
 The Dashboard’s Agent page eventually becomes a complete Agent Widget. It is staged deliberately: V1 focuses on invoking Claudian and switching Codex/OpenCode; subsequent phases enrich status, prompts, history, provider/model controls, and review UX.
 
@@ -97,7 +111,9 @@ The Dashboard’s Agent page eventually becomes a complete Agent Widget. It is s
 - Default access: read the whole Vault.
 - Never delete notes, bulk rewrite/restructure content, or modify `.obsidian` without explicit user instruction/approval.
 - Treat multi-file writes, destructive changes, command execution, and configuration edits as higher risk.
-- Make generated writes narrow and attributable. Prefer confirm/preview flows where the integration supports them.
+- Make generated writes narrow and attributable. Existing-note Agent writes
+  remain review-first. A user-sent course/paper/book creation request may create
+  exactly one note after fail-closed path checks without a second confirmation.
 - Record lightweight logs for every agent write: timestamp, requested workflow, selected agent, affected paths, outcome, and minimal error information. Do not log full note contents or secrets.
 - Retain logs for 30 days by default; make retention configurable and periodically clean expired entries.
 

@@ -36,14 +36,20 @@ const REQUESTS: readonly AgentWorkflowRequest[] = [
 		target: 'codex',
 		userInput: 'Algorithms — Week 3',
 		templatePath: 'Templates/Course.md',
-		requestedDestination: 'Academic Notes/Courses',
+		requestedDestination: 'Course',
 	},
 	{
 		workflowId: 'create-paper-reading-note',
 		target: 'opencode',
 		userInput: 'Attention Is All You Need',
 		templatePath: 'Templates/Paper.md',
-		requestedDestination: 'Academic Notes/Papers',
+		requestedDestination: 'Paper',
+	},
+	{
+		workflowId: 'create-book-reading-note',
+		target: 'codex',
+		userInput: 'Designing Data-Intensive Applications',
+		requestedDestination: 'Reading',
 	},
 ];
 
@@ -52,7 +58,7 @@ describe('Agent workflow prompts', () => {
 		for (const request of REQUESTS) {
 			const prompt = buildAgentWorkflowPrompt(request);
 			expect(prompt).toContain('[Academic Dashboard workflow handoff]');
-			expect(prompt).toContain('Do not delete, move, or reorganize files');
+			expect(prompt).toMatch(/Do not delete, move,(?: rename, overwrite,)? or (?:otherwise )?reorganize existing files|Do not delete, move, or reorganize files/u);
 			expect(prompt).toContain('do not modify the Vault configuration folder or hidden paths');
 			expect(prompt).toContain('do not run shell/Git commands');
 			expect(prompt).toContain('do not use the network');
@@ -65,13 +71,14 @@ describe('Agent workflow prompts', () => {
 		expect(prompt).toContain('Daily Notes/2026-08-15.md');
 		expect(prompt).toContain('frontmatter field "type" equals "course-note"');
 		expect(prompt).toContain('frontmatter field "type" equals "paper"');
+		expect(prompt).toContain('frontmatter field "type" equals "book-note"');
 		expect(prompt).toContain('show a routing table');
 		expect(prompt).toContain('Preserve the source Daily Note unchanged');
 		expect(prompt).toContain('Do not touch more than 10 target notes');
 		expect(prompt).toContain('No other bulk edit is authorized');
 	});
 
-	it('keeps read-only workflows read-only and write workflows review-first', () => {
+	it('keeps read-only workflows read-only, existing-note writes review-first, and new notes direct', () => {
 		expect(buildAgentWorkflowPrompt(REQUESTS[1]!)).toContain(
 			'This is read-only. Return the result in Claudian chat and make no file changes.',
 		);
@@ -81,9 +88,13 @@ describe('Agent workflow prompts', () => {
 		expect(buildAgentWorkflowPrompt(REQUESTS[0]!)).toContain(
 			'Show a plan or diff and wait for explicit user approval in Claudian',
 		);
-		expect(buildAgentWorkflowPrompt(REQUESTS[5]!)).toContain(
-			'Do not overwrite an existing note.',
-		);
+		for (const request of REQUESTS.slice(5)) {
+			const prompt = buildAgentWorkflowPrompt(request);
+			expect(prompt).toContain('Search recursively inside the requested destination folder');
+			expect(prompt).toContain('If matches point to more than one folder, stop');
+			expect(prompt).toContain('Do not show another plan or diff');
+			expect(prompt).toContain('without requesting another approval');
+		}
 	});
 
 	it('rejects Daily Note routing without a safe source or metadata mapping', () => {
@@ -132,5 +143,12 @@ describe('Agent workflow prompts', () => {
 				requestedDestination: '../outside',
 			}),
 		).toThrow('visible Vault content');
+		expect(() =>
+			buildAgentWorkflowPrompt({
+				workflowId: 'create-book-reading-note',
+				target: 'codex',
+				userInput: 'Book',
+			}),
+		).toThrow('requires a visible Vault-relative destination root');
 	});
 });

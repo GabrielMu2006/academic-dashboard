@@ -208,7 +208,7 @@ describe('planning Widgets', () => {
 		expect(reviewTaskToggle).not.toHaveBeenCalled();
 	});
 
-	it('reviews a missing Daily Note and exposes course and paper entry points', async () => {
+	it('reviews a missing Daily Note and exposes course, paper, and book entry points', async () => {
 		const createDailyNote = vi.fn(async () => 'cancelled' as const);
 		const createAcademicNote = vi.fn(async () => undefined);
 		const mounted = context('home.calendar');
@@ -231,8 +231,10 @@ describe('planning Widgets', () => {
 		const actions = mounted.content.children[0]?.children[1];
 		actions?.children[0]?.click();
 		actions?.children[1]?.click();
+		actions?.children[2]?.click();
 		expect(createAcademicNote).toHaveBeenNthCalledWith(1, 'course-note');
 		expect(createAcademicNote).toHaveBeenNthCalledWith(2, 'paper-reading');
+		expect(createAcademicNote).toHaveBeenNthCalledWith(3, 'book-reading');
 	});
 
 	it('reports an explicit empty Native fallback state', async () => {

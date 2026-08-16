@@ -20,7 +20,10 @@ export interface NoteTemplateSetting {
 export interface AcademicTemplateSettings {
 	readonly courseNote: NoteTemplateSetting;
 	readonly paperReading: NoteTemplateSetting;
+	readonly bookReading: NoteTemplateSetting;
 }
+
+export const BOOK_READING_NOTE_TYPE = 'book-note';
 
 export const DEFAULT_COURSE_NOTE_TEMPLATE = `---
 "{{field.noteType}}": "{{value.courseNoteType}}"
@@ -53,6 +56,28 @@ export const DEFAULT_PAPER_READING_TEMPLATE = `---
 ## Notes
 `;
 
+export const DEFAULT_BOOK_READING_TEMPLATE = `---
+"{{field.noteType}}": "${BOOK_READING_NOTE_TYPE}"
+"{{field.title}}": "{{titleYaml}}"
+"{{field.authors}}": []
+"{{field.status}}": "reading"
+"{{field.date}}": "{{date}}"
+"{{field.tags}}": []
+---
+
+# {{title}}
+
+## 书目信息
+
+## 内容概述
+
+## 核心观点
+
+## 摘录与批注
+
+## 读后思考
+`;
+
 function freezeTemplate(setting: NoteTemplateSetting): NoteTemplateSetting {
 	return Object.freeze({ ...setting });
 }
@@ -63,6 +88,7 @@ function freezeTemplates(
 	return Object.freeze({
 		courseNote: freezeTemplate(settings.courseNote),
 		paperReading: freezeTemplate(settings.paperReading),
+		bookReading: freezeTemplate(settings.bookReading),
 	});
 }
 
@@ -71,13 +97,19 @@ export const DEFAULT_TEMPLATE_SETTINGS: AcademicTemplateSettings = freezeTemplat
 		source: 'custom',
 		customTemplate: DEFAULT_COURSE_NOTE_TEMPLATE,
 		vaultTemplatePath: '',
-		destinationFolder: 'Academic Notes/Courses',
+		destinationFolder: 'Course',
 	},
 	paperReading: {
 		source: 'custom',
 		customTemplate: DEFAULT_PAPER_READING_TEMPLATE,
 		vaultTemplatePath: '',
-		destinationFolder: 'Academic Notes/Papers',
+		destinationFolder: 'Paper',
+	},
+	bookReading: {
+		source: 'custom',
+		customTemplate: DEFAULT_BOOK_READING_TEMPLATE,
+		vaultTemplatePath: '',
+		destinationFolder: 'Reading',
 	},
 });
 
@@ -202,8 +234,23 @@ export function validateAcademicTemplateSettings(
 		'settings.templates.paperReading',
 		issues,
 	);
-	if (issues.length > 0 || !courseNote || !paperReading) {
+	const bookReading = validateTemplate(
+		input.bookReading,
+		'settings.templates.bookReading',
+		issues,
+	);
+	if (issues.length > 0 || !courseNote || !paperReading || !bookReading) {
 		return validationFailure(issues);
 	}
-	return validationSuccess(freezeTemplates({ courseNote, paperReading }));
+	return validationSuccess(freezeTemplates({ courseNote, paperReading, bookReading }));
+}
+
+export function migrateAcademicTemplateSettings(
+	input: unknown,
+): ValidationResult<AcademicTemplateSettings> {
+	if (!isRecord(input)) return validateAcademicTemplateSettings(input);
+	return validateAcademicTemplateSettings({
+		...input,
+		bookReading: input.bookReading ?? DEFAULT_TEMPLATE_SETTINGS.bookReading,
+	});
 }

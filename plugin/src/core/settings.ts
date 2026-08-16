@@ -43,6 +43,7 @@ import {
 import { isPageId, type PageId } from './pages';
 import {
 	DEFAULT_TEMPLATE_SETTINGS,
+	migrateAcademicTemplateSettings,
 	validateAcademicTemplateSettings,
 	type AcademicTemplateSettings,
 } from './template-settings';
@@ -56,7 +57,7 @@ import {
 	type ValidationResult,
 } from './validation';
 
-export const SETTINGS_SCHEMA_VERSION = 5;
+export const SETTINGS_SCHEMA_VERSION = 6;
 
 export interface DashboardSettings {
 	readonly schemaVersion: typeof SETTINGS_SCHEMA_VERSION;
@@ -298,13 +299,14 @@ export function migrateDashboardSettings(
 			input.schemaVersion !== 1 &&
 			input.schemaVersion !== 2 &&
 			input.schemaVersion !== 3 &&
-			input.schemaVersion !== 4)
+			input.schemaVersion !== 4 &&
+			input.schemaVersion !== 5)
 	) {
 		return validationFailure([
 			validationIssue(
 				'unsupported_settings_migration',
 				'settings.schemaVersion',
-				`Only settings schema versions 0 through 4 can migrate to version ${SETTINGS_SCHEMA_VERSION}.`,
+				`Only settings schema versions 0 through 5 can migrate to version ${SETTINGS_SCHEMA_VERSION}.`,
 			),
 		]);
 	}
@@ -333,14 +335,15 @@ export function migrateDashboardSettings(
 	if (!widgets.ok) issues.push(...widgets.issues);
 
 	const metadata =
-		input.schemaVersion === 2 || input.schemaVersion === 3 || input.schemaVersion === 4
+		input.schemaVersion === 2 || input.schemaVersion === 3 ||
+		input.schemaVersion === 4 || input.schemaVersion === 5
 			? validateMetadataSettings(input.metadata)
 			: validationSuccess(DEFAULT_METADATA_SETTINGS);
 	if (!metadata.ok) issues.push(...metadata.issues);
 
 	const templates =
-		input.schemaVersion === 3 || input.schemaVersion === 4
-			? validateAcademicTemplateSettings(input.templates)
+		input.schemaVersion === 3 || input.schemaVersion === 4 || input.schemaVersion === 5
+			? migrateAcademicTemplateSettings(input.templates)
 			: validationSuccess(DEFAULT_TEMPLATE_SETTINGS);
 	if (!templates.ok) issues.push(...templates.issues);
 
@@ -349,16 +352,34 @@ export function migrateDashboardSettings(
 			? validationSuccess(Object.freeze([]) as readonly WidgetId[])
 			: validateHiddenWidgetIds(input.hiddenWidgetIds);
 	if (!hiddenWidgetIds.ok) issues.push(...hiddenWidgetIds.issues);
-	const agent = input.schemaVersion === 4
+	const agent = input.schemaVersion === 4 || input.schemaVersion === 5
 		? validateAgentSettings(input.agent)
 		: validationSuccess(DEFAULT_AGENT_SETTINGS);
 	if (!agent.ok) issues.push(...agent.issues);
-	const agentWriteLog = input.schemaVersion === 4
+	const agentWriteLog = input.schemaVersion === 4 || input.schemaVersion === 5
 		? input.agentWriteLog === undefined
 			? validationSuccess(Object.freeze([]) as readonly AgentWriteLogEntry[])
 			: validateAgentWriteLog(input.agentWriteLog)
 		: validationSuccess(Object.freeze([]) as readonly AgentWriteLogEntry[]);
 	if (!agentWriteLog.ok) issues.push(...agentWriteLog.issues);
+	const localWrites = input.schemaVersion === 5
+		? validateLocalWriteSettings(input.localWrites)
+		: validationSuccess(DEFAULT_LOCAL_WRITE_SETTINGS);
+	if (!localWrites.ok) issues.push(...localWrites.issues);
+	const localWriteLog = input.schemaVersion === 5
+		? input.localWriteLog === undefined
+			? validationSuccess(Object.freeze([]) as readonly LocalWriteLogEvent[])
+			: validateLocalWriteLog(input.localWriteLog)
+		: validationSuccess(Object.freeze([]) as readonly LocalWriteLogEvent[]);
+	if (!localWriteLog.ok) issues.push(...localWriteLog.issues);
+	const github = input.schemaVersion === 5
+		? validateGithubSettings(input.github)
+		: validationSuccess(DEFAULT_GITHUB_SETTINGS);
+	if (!github.ok) issues.push(...github.issues);
+	const locale = input.schemaVersion === 5
+		? validateLocaleSettings(input.locale)
+		: validationSuccess(DEFAULT_LOCALE_SETTINGS);
+	if (!locale.ok) issues.push(...locale.issues);
 
 	if (
 		issues.length > 0 ||
@@ -367,6 +388,10 @@ export function migrateDashboardSettings(
 		!templates.ok ||
 		!agent.ok ||
 		!agentWriteLog.ok ||
+		!localWrites.ok ||
+		!localWriteLog.ok ||
+		!github.ok ||
+		!locale.ok ||
 		!hiddenWidgetIds.ok
 	) {
 		return validationFailure(issues);
@@ -381,10 +406,10 @@ export function migrateDashboardSettings(
 			templates.value,
 			agent.value,
 			agentWriteLog.value,
-			DEFAULT_LOCAL_WRITE_SETTINGS,
-			[],
-			DEFAULT_GITHUB_SETTINGS,
-			DEFAULT_LOCALE_SETTINGS,
+			localWrites.value,
+			localWriteLog.value,
+			github.value,
+			locale.value,
 			hiddenWidgetIds.value,
 		),
 	);
@@ -452,7 +477,8 @@ export function restoreDashboardSettings(
 			input.schemaVersion === 1 ||
 			input.schemaVersion === 2 ||
 			input.schemaVersion === 3 ||
-			input.schemaVersion === 4)
+			input.schemaVersion === 4 ||
+			input.schemaVersion === 5)
 	) {
 		const migrated = migrateDashboardSettings(input, options.knownWidgetIds);
 		return migrated.ok

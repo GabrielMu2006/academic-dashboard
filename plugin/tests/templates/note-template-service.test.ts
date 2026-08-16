@@ -13,6 +13,7 @@ function port(overrides: Partial<NoteTemplatePort> = {}) {
 	const files = new Map<string, string>();
 	const value: NoteTemplatePort = {
 		read: async (path) => files.get(path) ?? null,
+		listDescendants: async () => [],
 		compareAndSwap: async () => 'conflict',
 		ensureFolder: async (path) => {
 			ensured.push(path);
@@ -49,8 +50,8 @@ describe('safe note template creation', () => {
 			title: 'Distributed Systems',
 		});
 
-		expect(result.path).toBe('Academic Notes/Courses/Distributed Systems.md');
-		expect(templatePort.ensured).toEqual(['Academic Notes/Courses']);
+		expect(result.path).toBe('Course/Distributed Systems/Distributed Systems.md');
+		expect(templatePort.ensured).toEqual(['Course/Distributed Systems']);
 		expect(templatePort.created).toHaveLength(1);
 		expect(templatePort.created[0]?.content).toContain('"kind": "class-note"');
 		expect(templatePort.created[0]?.content).toContain('"date": "2026-08-11"');
@@ -91,7 +92,7 @@ describe('safe note template creation', () => {
 
 		const existingPort = port();
 		existingPort.files.set(
-			'Academic Notes/Courses/Existing.md',
+			'Course/Existing/Existing.md',
 			'user content',
 		);
 		await expect(
@@ -125,7 +126,7 @@ describe('safe note template creation', () => {
 			title: 'Previewed',
 		});
 
-		expect(preview.path).toBe('Academic Notes/Courses/Previewed.md');
+		expect(preview.path).toBe('Course/Previewed/Previewed.md');
 		expect(preview.content).toContain('# Previewed');
 		expect(preview.contentFingerprint).toMatch(/^v1-/u);
 		expect(Object.isFrozen(preview)).toBe(true);
@@ -145,8 +146,73 @@ describe('safe note template creation', () => {
 
 		await expect(noteTemplates.confirm({
 			...preview,
-			path: 'Academic Notes/Courses/Other.md',
+			path: 'Course/Other/Other.md',
 		})).rejects.toMatchObject({ code: 'invalid_destination' });
 		expect(templatePort.created).toHaveLength(0);
+	});
+
+	it('creates a book-reading note with the book-note discriminator', async () => {
+		const templatePort = port();
+
+		const result = await service(templatePort.value).create({
+			kind: 'book-reading',
+			title: '深度学习推荐系统',
+		});
+
+		expect(result.path).toBe('Reading/深度学习推荐系统/深度学习推荐系统.md');
+		expect(templatePort.created[0]?.content).toContain('"kind": "book-note"');
+		expect(templatePort.created[0]?.content).toContain('## 读后思考');
+	});
+
+	it('groups a note into a matching folder before creating a new folder', async () => {
+		const templatePort = port({
+			listDescendants: async () => [
+				{ path: 'Paper/Attention Is All You Need', kind: 'folder' },
+				{ path: 'Paper/Attention Is All You Need/source.pdf', kind: 'file' },
+			],
+		});
+
+		const preview = await service(templatePort.value).preview({
+			kind: 'paper-reading',
+			title: 'Attention Is All You Need',
+		});
+
+		expect(preview.path).toBe(
+			'Paper/Attention Is All You Need/Attention Is All You Need.md',
+		);
+	});
+
+	it('groups beside a title-prefixed source file in one existing folder', async () => {
+		const templatePort = port({
+			listDescendants: async () => [
+				{
+					path: 'Reading/DL_Recommender_System/深度学习推荐系统 (王喆).pdf',
+					kind: 'file',
+				},
+			],
+		});
+
+		const preview = await service(templatePort.value).preview({
+			kind: 'book-reading',
+			title: '深度学习推荐系统',
+		});
+
+		expect(preview.path).toBe(
+			'Reading/DL_Recommender_System/深度学习推荐系统.md',
+		);
+	});
+
+	it('fails closed when equally strong matches point to multiple folders', async () => {
+		const templatePort = port({
+			listDescendants: async () => [
+				{ path: 'Paper/First/Same Title.pdf', kind: 'file' },
+				{ path: 'Paper/Second/Same Title.md', kind: 'file' },
+			],
+		});
+
+		await expect(service(templatePort.value).preview({
+			kind: 'paper-reading',
+			title: 'Same Title',
+		})).rejects.toMatchObject({ code: 'ambiguous_destination' });
 	});
 });

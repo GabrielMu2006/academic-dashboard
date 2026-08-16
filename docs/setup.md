@@ -60,7 +60,7 @@ viewer cache.
 
 The Daily Quote Widget can read a visible Markdown file inside the current
 Vault. In **Settings → Academic Dashboard → Local quotes**, enter a
-Vault-relative path such as `Reading/每日引言.md`, save it, and choose
+Vault-relative path such as the default `每日引言.md` at the Vault root, save it, and choose
 **Open file** to edit it in Obsidian. Each non-empty, non-heading line is one
 quote, up to 366 entries (enough for a leap year); Markdown bullets,
 numbered-list prefixes, and blockquote markers are removed. YAML frontmatter
@@ -71,6 +71,24 @@ network quote service.
 The settings page retains the original local quote list as a compatibility
 fallback. It is used only when the quote-file path is empty. A missing or empty
 configured file is reported explicitly instead of silently switching sources.
+
+## Academic note creation
+
+The course, paper-reading, and book-reading templates default to `Course`,
+`Paper`, and `Reading`. Before creating a note, Dashboard searches the selected
+root recursively using Unicode-normalized, case-insensitive names:
+
+- an exact matching folder receives the note;
+- related files whose basename equals the title or begins with the complete
+  title keep the note in their one common folder;
+- no match creates `<root>/<title>/<title>.md`; and
+- equally suitable matches in different folders stop as an ambiguity.
+
+Dashboard never moves or modifies related files, and exclusive creation still
+refuses an existing Markdown target. Local Home/command creation retains its
+content preview. The equivalent Claudian course, paper, and book workflows
+create one note after these checks without a second approval once the user has
+pressed Send.
 
 ## Research paper actions
 
@@ -121,6 +139,8 @@ API key into Dashboard settings, this repository, the setup diagnostic, an issue
 report, or a screenshot.
 
 Claudian 2.1.3 requires the user to verify the requested target and press Send.
+For a course, paper, or book creation workflow, Send is the only confirmation;
+the prompt forbids a second plan/diff approval request.
 
 ### Daily Note academic routing
 
@@ -131,7 +151,7 @@ Claudian. The note must already exist. Optional focus text can name headings to
 include or material to leave in place.
 
 Claudian prepares a table that maps each coherent source block to one uniquely
-matched existing course or paper note. Review that table and every proposed
+matched existing course, paper, or book note. Review that table and every proposed
 append before approval. Ambiguous blocks are left unmatched, no new target note
 is created, the source Daily Note remains unchanged, and a run may touch at most
 ten target notes.

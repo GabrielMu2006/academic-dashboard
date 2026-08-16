@@ -119,14 +119,19 @@ assumed from Tasks internals: missing or installed-but-unsupported versions
 declare `fallback` and delegate to the Native Markdown adapter. A compatible
 capability or runtime failure remains isolated inside that adapter.
 
-Settings schema version 3 adds course-note and paper-reading template settings.
-Each may use editable Dashboard-owned Markdown or a selected Vault Markdown
-template, with a validated Vault-relative destination. The creation service
-resolves only documented placeholders, rejects unsafe filenames and hidden or
-traversing paths, checks destination existence before and after folder creation,
-and calls `Vault.create` exactly once. Existing notes are never overwritten.
-The two user-triggered commands are local creation actions; they do not invoke
-Claudian or an Agent runtime.
+Settings schema version 3 introduced course-note and paper-reading template
+settings. Schema version 6 adds book-reading settings and migrates schema 5
+without discarding existing template customizations, layouts, mappings, logs,
+GitHub settings/cache metadata, or locale. Each template may use editable
+Dashboard-owned Markdown or a selected Vault Markdown template, with a
+validated Vault-relative root. The creation service resolves only documented
+placeholders, rejects unsafe filenames and hidden or traversing paths, and
+searches that root recursively for related folder/file names. One clear match
+selects its directory; no match creates `<root>/<title>/<title>.md`; competing
+best directories fail closed. Exclusive creation calls `Vault.create` exactly
+once, and existing material is never moved, changed, or overwritten. The three
+user-triggered commands are local creation actions; they do not invoke Claudian
+or an Agent runtime.
 
 Local Obsidian activity uses only the latest filesystem modification timestamp
 for each Markdown note, grouped into local calendar days. It is a contribution
@@ -196,13 +201,14 @@ is 30 days. Existing schema-3 layouts, metadata mappings, templates, and optiona
 plugin preferences are preserved. Cleanup runs at startup and every six hours;
 entries older than the configured 1–3650 day window are removed.
 
-The Dashboard constructs one of seven constrained workflow requests and passes it
+The Dashboard constructs one of eight constrained workflow requests and passes it
 only to the Claudian adapter. Claudian owns execution and the selected target
 agent (Codex/OpenCode) owns its provider/model/auth configuration. The audited
 Claudian 2.1.3 compatibility port can reveal the Claudian view and prefill its
 public composer, but cannot reliably switch target, submit, or observe execution
 completion. The user therefore verifies the target and explicitly sends. The UI
-reports `ready for review`, never an invented running or completed state.
+reports only `ready for review` or `ready to send`, never an invented running or
+completed state.
 
 Read-only workflows are not logged as writes. For write-capable workflows, the
 Dashboard records only timestamp, workflow id, target, declared Vault-relative
@@ -215,13 +221,21 @@ No component may silently make broad edits, delete notes, alter Vault structure,
 
 The seventh workflow resolves today's Daily Note from the configured folder and
 filename format, rather than relying on whichever tab is active. It passes the
-validated course/paper metadata mappings to Claudian and requests a bounded
+validated course/paper/book metadata mappings to Claudian and requests a bounded
 routing proposal: source blocks may be appended to at most ten uniquely matched
-existing course or paper notes. Ambiguous blocks remain unmatched; the source
+existing course, paper, or book notes. Ambiguous blocks remain unmatched; the source
 Daily Note, frontmatter, Vault structure, and hidden paths remain unchanged.
 Dashboard neither reads the source body nor performs these edits itself. The
 user reviews the routing table and proposed diffs and explicitly sends/approves
 the request in Claudian.
+
+The eighth workflow creates a book-reading note and joins the course/paper
+creation workflows in a `direct-write` boundary. The user still verifies the
+target and presses Send because Claudian 2.1.3 cannot be submitted through its
+public cross-plugin interface. After Send, these three prompts perform the same
+related-material path preflight and authorize exactly one new Markdown note
+(plus at most one title-named folder) without a second plan/diff approval.
+Existing-note and multi-note writes remain `proposed-write` and review-first.
 
 ### Conservative local write contract
 
@@ -241,7 +255,7 @@ opaque fingerprint before the port performs an atomic comparison.
 Edit Undo state retains the exact before/after content only in memory and is
 discarded on unload/restart. Undo compares the entire current note with the
 Dashboard-written post-state, so any later user edit makes Undo unavailable.
-Creation has no delete-style Undo. Existing course/paper creation commands use
+Creation has no delete-style Undo. Existing course/paper/book creation commands use
 the same preview and exclusive-create core; Phase 7 adds no Widget action.
 
 Settings schema version 5 adds validated Daily Note defaults, paper write field
@@ -249,6 +263,10 @@ names, a future GitHub SecretStorage reference name plus cache metadata, local
 write-log retention, and locale resource selection. It never stores a GitHub
 PAT. English and Simplified Chinese resource catalogs exist for later action
 surfaces, with English as the fallback; Phase 7 does not rewrite the full UI.
+
+Settings schema version 6 adds the book-reading template and preserves all
+valid schema-5 fields during migration. New defaults use `Course`, `Paper`, and
+`Reading` as academic roots and `每日引言.md` at the Vault root as the quote file.
 
 Phase 8 surfaces a deliberately small Home action layer over the same service.
 Today's Tasks enables completion only while the active adapter declares the
@@ -261,8 +279,8 @@ read-only because Dashboard has no reviewed third-party write contract.
 Calendar dates with an existing ISO-named note still open that note. A missing
 date resolves one destination and template from validated Daily Note settings,
 shows its Vault-relative path and bounded content, and confirms through the
-exclusive-create contract. The same review modal is used by the Home course and
-paper entry points and their command-palette equivalents. Creation never gains
+exclusive-create contract. The same review modal is used by the Home course,
+paper, and book entry points and their command-palette equivalents. Creation never gains
 a delete-style Undo.
 
 Phase 9 surfaces the existing `review-date` operation on Study only for a Native

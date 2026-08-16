@@ -31,7 +31,7 @@ export interface PlanningWidgetServices {
 	}[];
 	readonly createDailyNote: (date: string) => Promise<'cancelled' | 'created'>;
 	readonly createAcademicNote: (
-		kind: 'course-note' | 'paper-reading',
+		kind: 'course-note' | 'paper-reading' | 'book-reading',
 	) => Promise<void>;
 }
 
@@ -147,6 +147,7 @@ export class CalendarWidget extends AsyncPlanningWidget {
 		for (const [kind, title] of [
 			['course-note', 'New course note'],
 			['paper-reading', 'New paper note'],
+			['book-reading', 'New book note'],
 		] as const) {
 			const button = element(document, 'button', 'academic-dashboard-calendar__action', title);
 			button.type = 'button';

@@ -221,4 +221,39 @@ describe('Agent Widgets', () => {
 			'Today’s configured Daily Note does not exist',
 		);
 	});
+
+	it('hands a book-reading title and Reading destination to Claudian as a direct creation', async () => {
+		const baseAdapter = adapter();
+		const handoff = vi.fn((request: AgentWorkflowRequest) =>
+			baseAdapter.handoff(request));
+		const creationContext = vi.fn(() => ({ destination: 'Reading' }));
+		const target = mounted();
+		new AgentWorkflowWidget(services({
+			claudian: adapter({ handoff }),
+			creationContext,
+		})).mount(target.context);
+		let form = target.content.children[0];
+		const workflow = form?.children[0]?.children[1]?.children[1];
+		if (workflow) {
+			workflow.value = 'create-book-reading-note';
+			workflow.change();
+		}
+		form = target.content.children[0];
+		const input = form?.children[1]?.children[1];
+		if (input) {
+			input.value = 'Designing Data-Intensive Applications';
+			input.input();
+		}
+		expect(form?.children[2]?.textContent).toContain('no second approval');
+		form?.children[3]?.click();
+
+		await vi.waitFor(() => expect(handoff).toHaveBeenCalledOnce());
+		expect(creationContext).toHaveBeenCalledWith('create-book-reading-note');
+		expect(handoff).toHaveBeenCalledWith({
+			workflowId: 'create-book-reading-note',
+			target: 'codex',
+			userInput: 'Designing Data-Intensive Applications',
+			requestedDestination: 'Reading',
+		});
+	});
 });

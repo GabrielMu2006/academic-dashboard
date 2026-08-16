@@ -182,16 +182,25 @@ describe('local Widgets', () => {
 		expect(open).not.toHaveBeenCalled();
 	});
 
-	it('renders only local quotes and reports empty quote configuration', () => {
+	it('renders bundled local quotes when the quote file is disabled and reports empty configuration', () => {
 		const ready = context();
-		new LocalQuoteWidget(services()).mount(ready.value);
+		new LocalQuoteWidget(services({
+			getSettings: () => ({
+				...DEFAULT_LOCAL_WIDGET_SETTINGS,
+				quoteFilePath: '',
+			}),
+		})).mount(ready.value);
 		expect(ready.states.at(-1)).toEqual({ status: 'ready' });
 		expect(ready.content.children[0]?.tagName).toBe('blockquote');
 
 		const empty = context();
 		new LocalQuoteWidget(
 			services({
-				getSettings: () => ({ ...DEFAULT_LOCAL_WIDGET_SETTINGS, quotes: [] }),
+				getSettings: () => ({
+					...DEFAULT_LOCAL_WIDGET_SETTINGS,
+					quotes: [],
+					quoteFilePath: '',
+				}),
 			}),
 		).mount(empty.value);
 		expect(empty.states.at(-1)?.status).toBe('empty');

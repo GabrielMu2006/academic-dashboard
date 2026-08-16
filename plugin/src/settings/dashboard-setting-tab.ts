@@ -173,10 +173,11 @@ export class DashboardSettingTab extends PluginSettingTab {
 			cls: 'setting-item-description',
 		});
 		description.appendText(
-			'Use editable Dashboard templates or select existing Markdown templates in this Vault. Creation commands make one new note and never overwrite an existing path.',
+			'Use editable Dashboard templates or select existing Markdown templates in this Vault. Creation searches the configured root for matching folders or files, groups related material, and never overwrites an existing path.',
 		);
 		this.renderTemplateSetting('courseNote', 'Course note');
 		this.renderTemplateSetting('paperReading', 'Paper-reading note');
+		this.renderTemplateSetting('bookReading', 'Book-reading note');
 	}
 
 	private renderTemplateSetting(
@@ -473,7 +474,7 @@ export class DashboardSettingTab extends PluginSettingTab {
 			.setName('Quote file')
 			.setDesc('A vault-relative Markdown file. Each non-empty, non-heading line is one quote, up to 366 entries.')
 			.addText((text) => text
-				.setPlaceholder('Reading/每日引言.md')
+				.setPlaceholder('每日引言.md')
 				.setValue(pathDraft)
 				.onChange((value) => { pathDraft = value; }))
 			.addButton((button) => button.setButtonText('Save').setCta().onClick(() => {

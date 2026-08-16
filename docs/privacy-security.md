@@ -23,7 +23,7 @@ tokens, and free-form errors are not accepted by the log schema. The default
 retention is 30 days, configurable from 1 to 3650 days. Cleanup runs at startup
 and every six hours while the plugin is loaded.
 
-Settings schema 5 may additionally contain a **name/reference** for a GitHub PAT
+Settings schema 6 retains the schema-5 **name/reference** for a GitHub PAT
 held by Obsidian SecretStorage, the fixed six-hour cache duration, the explicit
 private-count preference, non-sensitive credential revision, last successful
 refresh timestamp, and up to 366 normalized date/count entries. It never
@@ -46,9 +46,12 @@ free-form errors and default to 30-day retention.
 
 ## Write and execution boundary
 
-Dashboard's two local note-creation commands create at most one new note after a
+Dashboard's three local academic note-creation commands create at most one new note after a
 user supplies a title. They validate the Vault-relative destination, refuse
-hidden/traversing paths, and never overwrite an existing note.
+hidden/traversing paths, search only the configured root for related names, and
+never move or overwrite existing material. A clear match selects one existing
+directory; no match creates a title-named folder; competing best matches fail
+closed.
 
 Agent work follows only:
 
@@ -56,10 +59,13 @@ Agent work follows only:
 Academic Dashboard -> Claudian -> Codex | OpenCode
 ```
 
-Write-capable prompts request a plan/diff and explicit approval. They forbid
-implicit bulk edits, deletes, folder restructuring, `.obsidian` changes, shell or
-Git actions, and network use. Dashboard does not send the request automatically
-or claim the Agent completed a filesystem write.
+Existing-note write prompts request a plan/diff and explicit approval. The
+course, paper, and book new-note prompts instead treat the user's Send as
+authorization for exactly one creation after path checks, with no second
+approval. All write-capable prompts forbid implicit bulk edits, deletes,
+existing-file restructuring, `.obsidian` changes, shell or Git actions, and
+network use. Dashboard does not send the request automatically or claim the
+Agent completed a filesystem write.
 
 Phase 7's local write infrastructure permits only one exact Markdown edit or
 one exclusive note creation at a time. It fingerprints and retains the exact
@@ -72,7 +78,7 @@ edit, or enter a hidden/configuration directory.
 Phase 8 Home controls do not expand that capability. Native Markdown task
 completion displays one exact line change and requires confirmation; its Undo
 token and full before/after note states stay in memory only until plugin unload.
-Missing Daily Notes and course/paper notes display one Vault-relative path plus
+Missing Daily Notes and course/paper/book notes display one Vault-relative path plus
 a bounded content preview before exclusive creation. Preview text, task text,
 template content, and Undo state are never added to the local write log.
 

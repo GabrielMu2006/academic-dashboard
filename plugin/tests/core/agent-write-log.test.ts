@@ -100,7 +100,7 @@ describe('Agent write log', () => {
 		).toEqual(result.value);
 	});
 
-	it('logs proposed-write handoffs but not read-only handoffs', () => {
+	it('logs proposed and direct write handoffs but not read-only handoffs', () => {
 		const now = new Date('2026-08-12T00:00:00.000Z');
 		expect(agentWriteLogEntryForHandoff(
 			{
@@ -140,6 +140,29 @@ describe('Agent write log', () => {
 			affectedPaths: ['Course/Week 1.md'],
 			outcome: 'handoff-failed',
 			errorCode: 'handoff-failed',
+		});
+
+		expect(agentWriteLogEntryForHandoff(
+			{
+				workflowId: 'create-book-reading-note',
+				target: 'codex',
+				userInput: 'Book',
+				requestedDestination: 'Reading',
+			},
+			{
+				status: 'ready-to-send',
+				target: 'codex',
+				workflowId: 'create-book-reading-note',
+				message: 'Prepared.',
+				requiresTargetConfirmation: true,
+			},
+			now,
+		)).toEqual({
+			timestamp: '2026-08-12T00:00:00.000Z',
+			workflowId: 'create-book-reading-note',
+			target: 'codex',
+			affectedPaths: ['Reading'],
+			outcome: 'prepared-to-send',
 		});
 	});
 });

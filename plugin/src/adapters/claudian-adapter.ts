@@ -1,4 +1,5 @@
 import { buildAgentWorkflowPrompt } from '../core/agent-workflow-prompts';
+import { getAgentWorkflow } from '../core/agent-workflows';
 import type {
 	AgentWorkflowRequest,
 	ClaudianAdapter,
@@ -156,11 +157,15 @@ export class ClaudianWorkflowAdapter implements ClaudianAdapter {
 				return failed(request, 'Claudian opened but its composer was unavailable.', 'composer-unavailable');
 			}
 			view.focusActiveInput?.();
+			const targetLabel = request.target === 'codex' ? 'Codex' : 'OpenCode';
+			const directCreation = getAgentWorkflow(request.workflowId).access === 'direct-write';
 			return Object.freeze({
-				status: 'ready-for-review',
+				status: directCreation ? 'ready-to-send' : 'ready-for-review',
 				target: request.target,
 				workflowId: request.workflowId,
-				message: `Prepared in Claudian. Verify ${request.target === 'codex' ? 'Codex' : 'OpenCode'}, review the request, then send it there.`,
+				message: directCreation
+					? `Prepared in Claudian. Verify ${targetLabel}, then press Send; the workflow will create one note after path checks without another approval.`
+					: `Prepared in Claudian. Verify ${targetLabel}, review the request, then send it there.`,
 				requiresTargetConfirmation: true,
 			});
 		} catch {

@@ -7,6 +7,11 @@ structure and Semantic Versioning.
 
 ### Added
 
+- Book-reading note template, Home/command entry point, and Claudian workflow,
+  with `Reading` as the default root and `type: book-note` metadata.
+- Related-material lookup for course, paper, and book creation: reuse one clear
+  matching directory or create `<root>/<title>/<title>.md`; ambiguous matches
+  fail closed and existing files are never moved or overwritten.
 - Vault-local Markdown sourcing for the Daily Quote Widget, with a settings
   action that opens the configured file directly in Obsidian.
 - Immediate single-paper Research status choices and favorite toggle with
@@ -20,6 +25,12 @@ structure and Semantic Versioning.
 
 ### Changed
 
+- Settings schema 6 preserves schema-5 state while adding book-note settings.
+  Default roots are now `Course`, `Paper`, and `Reading`, and the default quote
+  file is the Vault-root `每日引言.md`.
+- Claudian course, paper, and book creation requests no longer ask for a second
+  plan/diff confirmation after the user sends them; other write-capable
+  workflows remain review-first.
 - Conservative paper transforms now preserve line endings, replace existing
   simple scalars in place, and insert a missing mapped scalar only into an
   otherwise safe existing top-level frontmatter block.

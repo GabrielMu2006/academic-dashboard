@@ -23,7 +23,7 @@
 - Implement metadata schema recommendations and field-mapping settings.
 - Add robust Vault adapters for recent notes and recent papers.
 - Add calendar/today task adapters with native fallback; add Tasks adapter when present.
-- Add course-note and paper-reading default templates plus customization/selection settings.
+- Add course-note, paper-reading, and book-reading default templates plus customization/selection settings.
 - Add local Obsidian activity heatmap and a local-first GitHub activity data approach with clear availability states.
 
 **Exit criteria:** the dashboard remains useful in a plain Vault and becomes richer when compatible plugins/data are present.
@@ -41,7 +41,7 @@
 
 - Implement the Claudian adapter and availability/status model.
 - Add selected-agent state and Codex/OpenCode switching.
-- Implement the six approved workflows with current-note/Vault context handoff.
+- Implement the bounded workflows with current-note/Vault context handoff.
 - Provide a minimal Agent Widget/entry point and clear handoff status.
 - Add lightweight write logging, configurable 30-day retention, and periodic cleanup.
 
@@ -81,7 +81,7 @@ capability is introduced.
 
 ## Phase 7 — Conservative write infrastructure
 
-- Define project-owned, review-first contracts for one Markdown task toggle,
+- Define project-owned, conservative contracts for one Markdown task toggle,
   one review-date marker update, one paper `status` or `favorite` scalar
   update, and one Daily/Course/Paper note creation.
 - Add a fail-closed compare-before-write service that fingerprints the exact
@@ -110,7 +110,7 @@ behavior.
   completion, with current-session conditional Undo.
 - Open existing daily notes from Calendar; for a missing date, preview one safe
   Vault-relative path and bounded content before exclusive creation.
-- Add Home course-note and paper-reading-note entry points using the same
+- Add Home course-note, paper-reading-note, and book-reading-note entry points using the same
   review-first, exclusive-create service as the command palette.
 - Keep Tasks-plugin results read-only unless the adapter uses the Native
   Markdown fallback; do not call private Community Plugin write APIs.
@@ -207,6 +207,31 @@ Obsidian themes; all component roles use semantic fallbacks and documented
 hooks; behavior, permissions, persistence, localization, and accessibility stay
 intact; and matched visual QA, clean-archive, and real Light/Dark acceptance
 pass.
+
+## Phase 13 — Book notes and related-material routing
+
+**Status:** Implemented locally; not yet released.
+
+- Add a third academic template and command for book-reading notes, defaulting
+  to the `Reading` root with `type: book-note`.
+- Default academic roots to `Course`, `Paper`, and `Reading`, and default the
+  Daily Quote source to the Vault-root `每日引言.md`.
+- Before course, paper, or book creation, recursively search its configured root
+  for exact or complete-title-prefix folder/file matches. Reuse one clear
+  related directory; otherwise create `<root>/<title>/<title>.md`.
+- Fail closed on competing best destinations and retain exclusive create: never
+  move, rename, modify, or overwrite existing material.
+- Add a Claudian book-note workflow. Treat all three single-note creation
+  handoffs as explicitly authorized after the user presses Send, so path checks
+  are followed by one creation without a second plan/diff approval.
+- Migrate schema 5 to schema 6 without discarding layouts, metadata, local or
+  Agent write logs, GitHub settings/cache metadata, locale, or existing course
+  and paper template customizations.
+
+**Exit criteria:** local and Claudian creation share the documented grouping
+rules; ambiguous and existing destinations fail closed; schema-5 preservation,
+all unit tests, lint, typecheck, release checks, and installed-plugin smoke
+verification pass; no existing paper/PDF is moved or modified.
 
 ## Independent follow-on — PaperPulse Academic Obsidian theme
 

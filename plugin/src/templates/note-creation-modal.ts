@@ -23,13 +23,16 @@ export class NoteCreationModal extends Modal {
 	}
 
 	onOpen(): void {
+		const noteLabel = this.options.kind === 'course-note'
+			? 'course note'
+			: this.options.kind === 'paper-reading'
+				? 'paper-reading note'
+				: 'book-reading note';
 		this.setTitle(
-			this.options.kind === 'course-note'
-				? 'Create course note'
-				: 'Create paper-reading note',
+			`Create ${noteLabel}`,
 		);
 		this.contentEl.createEl('p', {
-			text: `Creates one new note in ${this.options.destinationFolder}. Existing files are never overwritten.`,
+			text: `Searches ${this.options.destinationFolder} for a matching folder or file, then creates one grouped note. Existing files are never overwritten.`,
 			cls: 'setting-item-description',
 		});
 		let title = '';
@@ -57,9 +60,7 @@ export class NoteCreationModal extends Modal {
 					try {
 						const preview = await this.options.preview(title);
 						const confirmed = await requestLocalWriteConfirmation(this.app, {
-							title: this.options.kind === 'course-note'
-								? 'Review course note'
-								: 'Review paper-reading note',
+							title: `Review ${noteLabel}`,
 							summary: 'Review this single-file creation. Existing files are never overwritten.',
 							path: preview.path,
 							afterLabel: 'Content preview (bounded to 2,000 characters when needed)',

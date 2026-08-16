@@ -3,6 +3,7 @@ import {
 	DEFAULT_DASHBOARD_SETTINGS,
 	migrateDashboardSettings,
 	restoreDashboardSettings,
+	SETTINGS_SCHEMA_VERSION,
 	validateDashboardSettings,
 } from '../../src/core/settings';
 import { DEFAULT_METADATA_SETTINGS } from '../../src/core/metadata-settings';
@@ -18,7 +19,7 @@ function emptyPages(): Record<string, unknown[]> {
 
 function validSettings(): Record<string, unknown> {
 	return {
-		schemaVersion: 5,
+		schemaVersion: SETTINGS_SCHEMA_VERSION,
 		defaultPage: 'study',
 		layouts: { schemaVersion: 3, pages: emptyPages() },
 		metadata: DEFAULT_METADATA_SETTINGS,
@@ -146,7 +147,7 @@ describe('Dashboard settings migration and recovery', () => {
 		expect(result.ok).toBe(true);
 		expect(JSON.stringify(input)).toBe(before);
 		if (result.ok) {
-			expect(result.value.schemaVersion).toBe(5);
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
 			expect(result.value.defaultPage).toBe('research');
 			expect(result.value.layouts.schemaVersion).toBe(3);
 			expect(result.value.metadata).toEqual(DEFAULT_METADATA_SETTINGS);
@@ -168,7 +169,7 @@ describe('Dashboard settings migration and recovery', () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.schemaVersion).toBe(5);
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
 			expect(result.value.widgets.quotes).toEqual(['Read carefully.']);
 			expect(result.value.hiddenWidgetIds).toEqual(['home.quote']);
 			expect(result.value.metadata).toEqual(DEFAULT_METADATA_SETTINGS);
@@ -189,7 +190,7 @@ describe('Dashboard settings migration and recovery', () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.schemaVersion).toBe(5);
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
 			expect(result.value.metadata.fields.noteType).toBe('kind');
 			expect(result.value.templates).toEqual(DEFAULT_TEMPLATE_SETTINGS);
 		}
@@ -214,7 +215,7 @@ describe('Dashboard settings migration and recovery', () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.schemaVersion).toBe(5);
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
 			expect(result.value.templates.courseNote.destinationFolder).toBe('My Courses');
 			expect(result.value.hiddenWidgetIds).toEqual(['home.quote']);
 			expect(result.value.agent).toEqual(DEFAULT_AGENT_SETTINGS);
@@ -246,7 +247,7 @@ describe('Dashboard settings migration and recovery', () => {
 
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.schemaVersion).toBe(5);
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
 			expect(result.value.layouts.schemaVersion).toBe(3);
 			expect(result.value.widgets.quotes).toEqual(['Preserved.']);
 			expect(result.value.hiddenWidgetIds).toEqual(['home.quote']);
@@ -256,6 +257,49 @@ describe('Dashboard settings migration and recovery', () => {
 			expect(result.value.localWrites).toEqual(DEFAULT_LOCAL_WRITE_SETTINGS);
 			expect(result.value.github).toEqual(DEFAULT_GITHUB_SETTINGS);
 			expect(result.value.locale).toEqual(DEFAULT_LOCALE_SETTINGS);
+		}
+	});
+
+	it('migrates version 5 by adding book notes without losing local-write or GitHub state', () => {
+		const { bookReading: _bookReading, ...legacyTemplates } = DEFAULT_TEMPLATE_SETTINGS;
+		const result = migrateDashboardSettings({
+			schemaVersion: 5,
+			defaultPage: 'home',
+			layouts: { schemaVersion: 3, pages: emptyPages() },
+			widgets: {
+				...DEFAULT_DASHBOARD_SETTINGS.widgets,
+				quoteFilePath: 'Reading/每日引言.md',
+			},
+			metadata: DEFAULT_METADATA_SETTINGS,
+			templates: {
+				...legacyTemplates,
+				courseNote: { ...legacyTemplates.courseNote, destinationFolder: 'Course' },
+				paperReading: { ...legacyTemplates.paperReading, destinationFolder: 'Paper' },
+			},
+			agent: DEFAULT_AGENT_SETTINGS,
+			agentWriteLog: [],
+			localWrites: DEFAULT_LOCAL_WRITE_SETTINGS,
+			localWriteLog: [{
+				timestamp: '2026-08-15T00:00:00.000Z',
+				operation: 'create-course-note',
+				path: 'Course/Test/Test.md',
+				outcome: 'committed',
+			}],
+			github: DEFAULT_GITHUB_SETTINGS,
+			locale: DEFAULT_LOCALE_SETTINGS,
+			hiddenWidgetIds: [],
+		});
+
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
+			expect(result.value.templates.bookReading).toEqual(
+				DEFAULT_TEMPLATE_SETTINGS.bookReading,
+			);
+			expect(result.value.templates.courseNote.destinationFolder).toBe('Course');
+			expect(result.value.widgets.quoteFilePath).toBe('Reading/每日引言.md');
+			expect(result.value.localWriteLog).toHaveLength(1);
+			expect(result.value.github).toEqual(DEFAULT_GITHUB_SETTINGS);
 		}
 	});
 
