@@ -17,7 +17,9 @@ import { t, translateEnglishSource } from '../core/localization';
 
 export interface AgentCreationContext {
 	readonly templatePath?: string;
+	readonly templateContent?: string;
 	readonly destination: string;
+	readonly resolvedPath: string;
 }
 
 export interface AgentWidgetServices {
@@ -32,7 +34,8 @@ export interface AgentWidgetServices {
 			| 'create-course-note'
 			| 'create-paper-reading-note'
 			| 'create-book-reading-note',
-	) => AgentCreationContext;
+		title: string,
+	) => Promise<AgentCreationContext>;
 	readonly onHandoff?: (
 		request: AgentWorkflowRequest,
 		result: ClaudianHandoffResult,
@@ -255,7 +258,7 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 			: null;
 	}
 
-	private request(): AgentWorkflowRequest {
+	private async request(): Promise<AgentWorkflowRequest> {
 		const target = this.services.getAgentSettings().selectedTarget;
 		const definition = getAgentWorkflow(this.workflowId);
 		if (definition.scope === 'current-note') {
@@ -276,18 +279,23 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 			};
 		}
 		if (definition.scope === 'new-note') {
-			const creation = this.services.creationContext(
+			const creation = await this.services.creationContext(
 				this.workflowId as
 					| 'create-course-note'
 					| 'create-paper-reading-note'
 					| 'create-book-reading-note',
+				this.input.trim(),
 			);
 			return {
 				workflowId: this.workflowId,
 				target,
 				userInput: this.input.trim(),
 				...(creation.templatePath ? { templatePath: creation.templatePath } : {}),
+				...(creation.templateContent
+					? { templateContent: creation.templateContent }
+					: {}),
 				requestedDestination: creation.destination,
+				resolvedNotePath: creation.resolvedPath,
 			};
 		}
 		return { workflowId: this.workflowId, target, userInput: this.input.trim() };
@@ -300,14 +308,16 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		button.textContent = 'Preparing…';
 		status.textContent = 'Opening handoff…';
 		try {
-			const request = this.request();
+			const request = await this.request();
 			const result = await this.services.claudian.handoff(request);
 			await this.services.onHandoff?.(request, result);
 			if (!this.context) return;
 			status.textContent = result.message;
 			status.setAttribute('data-status', result.status);
-		} catch {
-			status.textContent = 'The workflow handoff could not be prepared.';
+		} catch (error) {
+			status.textContent = error instanceof Error
+				? error.message
+				: 'The workflow handoff could not be prepared.';
 			status.setAttribute('data-status', 'failed');
 		} finally {
 			this.busy = false;

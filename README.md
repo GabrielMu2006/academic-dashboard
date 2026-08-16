@@ -214,8 +214,9 @@ preference and prepares bounded workflow context.
 With the verified Claudian 2.1.3 compatibility boundary, Dashboard can open and
 prefill the composer but cannot reliably switch the target, press Send, or
 observe completion. Verify the target, then send it yourself. For course,
-paper, and book creation, that send is the only confirmation: Claudian checks
-the destination and creates one note without another plan/diff approval.
+paper, and book creation, Dashboard first resolves the destination through the
+Obsidian Vault API; that send is the only confirmation, and Claudian creates the
+one resolved note without another plan/diff approval or Shell-based scan.
 `Ready for review` and `Ready to send` mean the request was prefilled; neither
 claims that an Agent ran or changed a file.
 

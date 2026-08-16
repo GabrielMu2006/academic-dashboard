@@ -105,7 +105,10 @@ function services(overrides: Partial<AgentWidgetServices> = {}): AgentWidgetServ
 		activeNotePath: () => 'Course/Week 1.md',
 		dailyNotePath: () => 'Daily Notes/2026-08-15.md',
 		academicMetadata: () => DEFAULT_METADATA_SETTINGS,
-		creationContext: () => ({ destination: 'Academic Notes' }),
+		creationContext: async (_workflowId, title) => ({
+			destination: 'Academic Notes',
+			resolvedPath: `Academic Notes/${title}/${title}.md`,
+		}),
 		...overrides,
 	};
 }
@@ -226,7 +229,11 @@ describe('Agent Widgets', () => {
 		const baseAdapter = adapter();
 		const handoff = vi.fn((request: AgentWorkflowRequest) =>
 			baseAdapter.handoff(request));
-		const creationContext = vi.fn(() => ({ destination: 'Reading' }));
+		const creationContext = vi.fn(async () => ({
+			destination: 'Reading',
+			resolvedPath: 'Reading/DL_Recommender_System/Designing Data-Intensive Applications.md',
+			templateContent: '# Designing Data-Intensive Applications\n',
+		}));
 		const target = mounted();
 		new AgentWorkflowWidget(services({
 			claudian: adapter({ handoff }),
@@ -248,12 +255,47 @@ describe('Agent Widgets', () => {
 		form?.children[3]?.click();
 
 		await vi.waitFor(() => expect(handoff).toHaveBeenCalledOnce());
-		expect(creationContext).toHaveBeenCalledWith('create-book-reading-note');
+		expect(creationContext).toHaveBeenCalledWith(
+			'create-book-reading-note',
+			'Designing Data-Intensive Applications',
+		);
 		expect(handoff).toHaveBeenCalledWith({
 			workflowId: 'create-book-reading-note',
 			target: 'codex',
 			userInput: 'Designing Data-Intensive Applications',
+			templateContent: '# Designing Data-Intensive Applications\n',
 			requestedDestination: 'Reading',
+			resolvedNotePath: 'Reading/DL_Recommender_System/Designing Data-Intensive Applications.md',
 		});
+	});
+
+	it('stops before Claudian when native creation preflight fails', async () => {
+		const handoff = vi.fn();
+		const target = mounted();
+		new AgentWorkflowWidget(services({
+			claudian: adapter({ handoff }),
+			creationContext: async () => {
+				throw new Error('Multiple matching folders or files were found.');
+			},
+		})).mount(target.context);
+		let form = target.content.children[0];
+		const workflow = form?.children[0]?.children[1]?.children[1];
+		if (workflow) {
+			workflow.value = 'create-book-reading-note';
+			workflow.change();
+		}
+		form = target.content.children[0];
+		const input = form?.children[1]?.children[1];
+		if (input) {
+			input.value = 'Ambiguous Book';
+			input.input();
+		}
+		form?.children[3]?.click();
+
+		await vi.waitFor(() => {
+			expect(form?.children[4]?.textContent).toContain('Multiple matching folders');
+		});
+		expect(handoff).not.toHaveBeenCalled();
+		expect(form?.children[4]?.attributes.get('data-status')).toBe('failed');
 	});
 });

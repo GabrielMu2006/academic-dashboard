@@ -86,9 +86,11 @@ root recursively using Unicode-normalized, case-insensitive names:
 
 Dashboard never moves or modifies related files, and exclusive creation still
 refuses an existing Markdown target. Local Home/command creation retains its
-content preview. The equivalent Claudian course, paper, and book workflows
-create one note after these checks without a second approval once the user has
-pressed Send.
+content preview. For the equivalent Claudian course, paper, and book workflows,
+Dashboard performs this scan through Obsidian's Vault API before handoff and
+passes one resolved path to Claudian. Claudian does not need Shell access or a
+user-supplied file list. It creates that one note without a second approval once
+the user has pressed Send.
 
 ## Research paper actions
 

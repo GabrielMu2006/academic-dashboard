@@ -202,6 +202,48 @@ describe('safe note template creation', () => {
 		);
 	});
 
+	it('prepares an Agent creation with native path preflight and rendered content', async () => {
+		const templatePort = port({
+			listDescendants: async () => [
+				{
+					path: 'Reading/DL_Recommender_System/深度学习推荐系统 (王喆).pdf',
+					kind: 'file',
+				},
+			],
+		});
+
+		const preparation = await service(templatePort.value).prepareAgentCreation({
+			kind: 'book-reading',
+			title: '深度学习推荐系统',
+		});
+
+		expect(preparation).toMatchObject({
+			path: 'Reading/DL_Recommender_System/深度学习推荐系统.md',
+			destination: 'Reading',
+		});
+		expect(preparation.templateContent).toContain('"kind": "book-note"');
+		expect(preparation.templateContent).toContain('# 深度学习推荐系统');
+		expect(templatePort.created).toHaveLength(0);
+		expect(templatePort.ensured).toHaveLength(0);
+	});
+
+	it('refuses an existing Agent target during native preflight without reading it', async () => {
+		const read = vi.fn(async () => null);
+		const templatePort = port({
+			read,
+			listDescendants: async () => [
+				{ path: 'Reading/Existing', kind: 'folder' },
+				{ path: 'Reading/Existing/Existing.md', kind: 'file' },
+			],
+		});
+
+		await expect(service(templatePort.value).prepareAgentCreation({
+			kind: 'book-reading',
+			title: 'Existing',
+		})).rejects.toMatchObject({ code: 'note_exists' });
+		expect(read).not.toHaveBeenCalled();
+	});
+
 	it('fails closed when equally strong matches point to multiple folders', async () => {
 		const templatePort = port({
 			listDescendants: async () => [

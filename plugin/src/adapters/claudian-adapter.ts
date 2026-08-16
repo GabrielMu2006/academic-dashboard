@@ -164,7 +164,7 @@ export class ClaudianWorkflowAdapter implements ClaudianAdapter {
 				target: request.target,
 				workflowId: request.workflowId,
 				message: directCreation
-					? `Prepared in Claudian. Verify ${targetLabel}, then press Send; the workflow will create one note after path checks without another approval.`
+					? `Prepared in Claudian. Dashboard path checks passed; verify ${targetLabel}, then press Send to create the one resolved note without another approval.`
 					: `Prepared in Claudian. Verify ${targetLabel}, review the request, then send it there.`,
 				requiresTargetConfirmation: true,
 			});

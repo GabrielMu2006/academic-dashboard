@@ -148,6 +148,7 @@ describe('Agent write log', () => {
 				target: 'codex',
 				userInput: 'Book',
 				requestedDestination: 'Reading',
+				resolvedNotePath: 'Reading/Book/Book.md',
 			},
 			{
 				status: 'ready-to-send',
@@ -161,7 +162,7 @@ describe('Agent write log', () => {
 			timestamp: '2026-08-12T00:00:00.000Z',
 			workflowId: 'create-book-reading-note',
 			target: 'codex',
-			affectedPaths: ['Reading'],
+			affectedPaths: ['Reading/Book/Book.md'],
 			outcome: 'prepared-to-send',
 		});
 	});

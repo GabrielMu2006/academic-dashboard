@@ -166,7 +166,7 @@ Academic Dashboard → Claudian → Codex | OpenCode
 
 仅当需要使用 Agent 页面时才安装并启用 Claudian。CLI 路径、供应商、模型、身份验证和权限应在 Claudian 以及所选 Agent 的可信界面中配置。Dashboard 只保存目标选择偏好，并准备范围受限的工作流上下文。
 
-在已验证的 Claudian 2.1.3 兼容边界内，Dashboard 可以打开并预填编辑器，但无法可靠地切换目标、点击发送或观察任务是否完成。请检查目标后自行发送。对课程、论文和读书笔记而言，这次发送就是唯一确认：Claudian 会先检查目标路径，再创建一篇笔记，不再要求查看计划或差异并二次批准。`Ready for review` 与 `Ready to send` 都只表示请求已预填，并不代表 Agent 已运行或更改了文件。
+在已验证的 Claudian 2.1.3 兼容边界内，Dashboard 可以打开并预填编辑器，但无法可靠地切换目标、点击发送或观察任务是否完成。请检查目标后自行发送。对课程、论文和读书笔记而言，Dashboard 会先通过 Obsidian Vault API 递归检索并解析出唯一目标路径；这次发送就是唯一确认，Claudian 无需 Shell 扫描即可创建这一篇笔记，也不会再要求查看计划或差异并二次批准。`Ready for review` 与 `Ready to send` 都只表示请求已预填，并不代表 Agent 已运行或更改了文件。
 
 ## 写入安全模型
 

@@ -61,8 +61,10 @@ Academic Dashboard -> Claudian -> Codex | OpenCode
 
 Existing-note write prompts request a plan/diff and explicit approval. The
 course, paper, and book new-note prompts instead treat the user's Send as
-authorization for exactly one creation after path checks, with no second
-approval. All write-capable prompts forbid implicit bulk edits, deletes,
+authorization for exactly one creation after Dashboard completes the recursive
+path check through Obsidian's Vault API, with no second approval. Claudian
+receives one resolved safe path and is explicitly told not to rescan with Shell
+or request a user-provided file listing. All write-capable prompts forbid implicit bulk edits, deletes,
 existing-file restructuring, `.obsidian` changes, shell or Git actions, and
 network use. Dashboard does not send the request automatically or claim the
 Agent completed a filesystem write.
