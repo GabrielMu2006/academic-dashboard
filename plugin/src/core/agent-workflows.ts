@@ -9,10 +9,11 @@ export const AGENT_WORKFLOW_IDS = [
 	'organize-daily-note-into-academic-notes',
 	'create-course-note',
 	'create-paper-reading-note',
+	'create-book-reading-note',
 ] as const;
 
 export type AgentWorkflowId = (typeof AGENT_WORKFLOW_IDS)[number];
-export type AgentWorkflowAccess = 'read-only' | 'proposed-write';
+export type AgentWorkflowAccess = 'read-only' | 'proposed-write' | 'direct-write';
 export type AgentWorkflowScope = 'current-note' | 'daily-note' | 'vault' | 'new-note';
 
 export interface AgentWorkflowDefinition {
@@ -55,22 +56,29 @@ export const AGENT_WORKFLOWS: readonly AgentWorkflowDefinition[] = Object.freeze
 	Object.freeze({
 		id: 'organize-daily-note-into-academic-notes',
 		title: 'Organize today’s note into academic notes',
-		description: 'Route today’s captured material into existing course or paper notes.',
+		description: 'Route today’s captured material into existing course, paper, or book notes.',
 		access: 'proposed-write',
 		scope: 'daily-note',
 	}),
 	Object.freeze({
 		id: 'create-course-note',
 		title: 'Create course note',
-		description: 'Propose one course note from the configured template.',
-		access: 'proposed-write',
+		description: 'Create one grouped course note from the configured template.',
+		access: 'direct-write',
 		scope: 'new-note',
 	}),
 	Object.freeze({
 		id: 'create-paper-reading-note',
 		title: 'Create paper-reading note',
-		description: 'Propose one paper-reading note from the configured template.',
-		access: 'proposed-write',
+		description: 'Create one grouped paper-reading note from the configured template.',
+		access: 'direct-write',
+		scope: 'new-note',
+	}),
+	Object.freeze({
+		id: 'create-book-reading-note',
+		title: 'Create book-reading note',
+		description: 'Create one grouped book-reading note from the configured template.',
+		access: 'direct-write',
 		scope: 'new-note',
 	}),
 ]);

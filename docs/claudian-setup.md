@@ -70,9 +70,10 @@ The first workflows are:
 - Summarize current note
 - Check and repair Markdown
 - Search the full Vault and answer a question
-- Organize today's Daily Note into existing course or paper notes
+- Organize today's Daily Note into existing course, paper, or book notes
 - Create course note
 - Create paper-reading note
+- Create book-reading note
 
 Each request contains only the needed context: selected workflow, a validated
 Vault-relative current-note path when applicable, a bounded user question or
@@ -81,11 +82,20 @@ scope. Dashboard never reads a note body merely to prepare the request.
 
 The Daily Note routing workflow resolves today's note from **Settings →
 Academic Dashboard → Daily Note creation**. It uses the configured academic
-metadata mappings to distinguish existing course and paper notes. Claudian must
+metadata mappings to distinguish existing course, paper, and book notes. Claudian must
 first show a routing table and proposed append-only changes; unmatched material
 stays in the Daily Note, the source is not edited, and one run is limited to ten
 existing targets. The user still verifies the selected Agent, sends the request,
 and approves the proposed changes in Claudian.
+
+The three new-note workflows are narrower. Claudian recursively checks the
+configured `Course`, `Paper`, or `Reading` root for a related folder or file,
+then creates exactly one note in the one clear directory, or in a new
+title-named folder when nothing matches. Competing destinations stop the run;
+existing files are never moved, changed, or overwritten. Pressing Send is the
+user's authorization for that single creation, so Claudian must not request a
+second plan/diff approval. Dashboard cannot press Send through the Claudian
+2.1.3 public boundary.
 
 ### Claudian 2.1.3 compatibility contract
 
@@ -110,9 +120,10 @@ See the [Claudian repository](https://github.com/YishenTu/claudian) and the
 ## Write policy
 
 Read access may span the Vault. Agent writes must remain conservative. Never
-allow implicit large-scale rewrites, deletes, folder restructuring, or
-`.obsidian` modifications. When Claudian/the target can present a plan or diff,
-expose that review opportunity. Dashboard logs only its own attempted
+allow implicit large-scale rewrites, deletes, existing-file restructuring, or
+`.obsidian` modifications. Existing-note writes expose a plan/diff review;
+single-note creation uses the explicit Send authorization described above.
+Dashboard logs only its own attempted
 write-capable handoffs with minimal metadata; Claudian 2.1.3 cannot provide a
 supported completion signal, so the log must not claim that an Agent write
 completed. Expired entries are deleted according to the configurable retention

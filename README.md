@@ -4,7 +4,7 @@
 
 Academic Dashboard is a desktop Obsidian plugin that turns an existing Vault
 into a calm, widget-based workspace for study, research, daily planning, and
-review-first Agent handoffs.
+bounded Agent handoffs.
 
 It is local-first and metadata-aware. The Dashboard reads the notes you already
 have, adapts to your frontmatter conventions, and keeps optional integrations
@@ -24,7 +24,8 @@ silently reorganize a Vault.
 - Today's Native Markdown tasks with an optional Tasks-plugin read adapter.
 - Recent papers and due-review summaries based on configurable metadata.
 - Quick links, frequently used Obsidian commands, and an Agent entry point.
-- Review-first creation of one Daily Note, course note, or paper-reading note.
+- Review-first creation of one Daily Note, course note, paper-reading note, or
+  book-reading note.
 - Exact Native Markdown task completion with current-session conditional Undo.
 
 ### Study
@@ -47,10 +48,13 @@ silently reorganize a Vault.
 ### Agent
 
 - Select Codex or OpenCode as the requested target.
-- Choose one of seven bounded workflows: organize or summarize a note, repair
+- Choose one of eight bounded workflows: organize or summarize a note, repair
   Markdown, search the Vault, route today's Daily Note into existing academic
-  notes, create a course note, or create a paper-reading note.
-- Open and prefill the request in Claudian for review.
+  notes, create a course note, create a paper-reading note, or create a
+  book-reading note.
+- Open and prefill the request in Claudian. Existing-note writes remain
+  review-first; the three single-note creation workflows run after path checks
+  without asking for a second confirmation.
 - Keep provider, model, authentication, permissions, sending, and execution in
   Claudian and the selected Agent rather than duplicating those controls.
 
@@ -122,12 +126,13 @@ Vault's settings and layouts and is migrated conservatively by the plugin.
 
 1. Open **Settings → Academic Dashboard** and choose the default page and
    visible Widgets.
-2. Review **Academic metadata** mappings so course and paper notes match your
+2. Review **Academic metadata** mappings so course, paper, and book notes match your
    existing frontmatter rather than being migrated.
-3. Configure Daily Note destinations and course/paper templates if you want
-   review-first note creation.
+3. Configure Daily Note destinations and course/paper/book templates if you want
+   local review-first note creation. The default roots are `Course`, `Paper`,
+   and `Reading`.
 4. Optionally set a Vault-relative local quote file such as
-   `Reading/每日引言.md`. Each non-empty, non-heading line is one quote, up to 366
+   `每日引言.md` at the Vault root. Each non-empty, non-heading line is one quote, up to 366
    entries.
 5. Optionally configure GitHub contributions and Claudian as described below.
 
@@ -157,6 +162,16 @@ status: unread # unread | reading | reviewed
 venue: ""
 doi: ""
 favorite: false
+tags: []
+```
+
+```yaml
+# book-reading note
+type: book-note
+title: ""
+authors: []
+status: reading
+date: 2026-08-11
 tags: []
 ```
 
@@ -198,9 +213,11 @@ preference and prepares bounded workflow context.
 
 With the verified Claudian 2.1.3 compatibility boundary, Dashboard can open and
 prefill the composer but cannot reliably switch the target, press Send, or
-observe completion. Verify the target and request, then send it yourself.
-`Ready for review` means the request was prefilled; it does not claim that an
-Agent ran or changed a file.
+observe completion. Verify the target, then send it yourself. For course,
+paper, and book creation, that send is the only confirmation: Claudian checks
+the destination and creates one note without another plan/diff approval.
+`Ready for review` and `Ready to send` mean the request was prefilled; neither
+claims that an Agent ran or changed a file.
 
 ## Write-safety model
 
@@ -209,7 +226,13 @@ Academic Dashboard permits only deliberately narrow local actions:
 - toggle one verifiable Native Markdown task;
 - update one supported Native Markdown review marker;
 - change one mapped paper status or favorite scalar; or
-- create one Daily, course, or paper note at a non-existing safe path.
+- create one Daily, course, paper, or book note at a non-existing safe path.
+
+Academic note creation searches the configured root recursively first. An exact
+matching folder is reused; related files in one folder keep the new note beside
+them; when nothing matches, Dashboard creates `<root>/<title>/<title>.md`.
+Matches spanning multiple equally suitable folders fail closed, and existing
+files are never moved or overwritten.
 
 Edits re-read and compare the complete note immediately before writing. A later
 user edit, moved note, changed field, ambiguous structure, or existing creation
@@ -218,7 +241,9 @@ for the current plugin session and refuses to overwrite later changes.
 
 The plugin has no delete, move, rename, bulk-edit, Git, subprocess, custom API
 endpoint, or automatic Vault-restructuring capability. Dashboard-to-Claudian
-handoffs are separate from local actions and still require review in Claudian.
+handoffs are separate from local actions. Existing-note writes still require
+review in Claudian; the three bounded new-note workflows are explicitly
+authorized by Send and do not request a second approval.
 
 ## Privacy and data handling
 

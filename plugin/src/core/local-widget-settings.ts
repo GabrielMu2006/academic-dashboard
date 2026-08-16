@@ -41,7 +41,7 @@ export const DEFAULT_LOCAL_WIDGET_SETTINGS: LocalWidgetSettings = Object.freeze(
 		'Clarity grows when the next step is visible.',
 		'Leave the workspace calmer than you found it.',
 	]),
-	quoteFilePath: '',
+	quoteFilePath: '每日引言.md',
 });
 
 function validText(value: unknown, maximum: number): value is string {

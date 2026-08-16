@@ -91,6 +91,23 @@ describe('ClaudianWorkflowAdapter', () => {
 		expect(activateView).toHaveBeenCalledOnce();
 	});
 
+	it('tells direct note creation to proceed after one manual Send', async () => {
+		const adapter = new ClaudianWorkflowAdapter(port());
+		const result = await adapter.handoff({
+			workflowId: 'create-book-reading-note',
+			target: 'codex',
+			userInput: 'The Pragmatic Programmer',
+			requestedDestination: 'Reading',
+		});
+
+		expect(result).toMatchObject({
+			status: 'ready-to-send',
+			requiresTargetConfirmation: true,
+		});
+		expect(result.message).toContain('press Send');
+		expect(result.message).toContain('without another approval');
+	});
+
 	it('fails softly when the request or composer is unavailable', async () => {
 		const adapter = new ClaudianWorkflowAdapter(port());
 		expect(

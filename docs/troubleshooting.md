@@ -89,10 +89,23 @@ Dashboard must not reach into Claudian internals as a workaround.
 
 ## Handoff says ready for review but nothing ran
 
-This is expected with Claudian 2.1.3. `Ready for review` means the bounded request
-was placed in the composer. Verify Codex/OpenCode in Claudian, review the prompt,
-then press Send yourself. Dashboard cannot report running/completed/failed Agent
-execution without a supported Claudian signal.
+This is expected with Claudian 2.1.3. `Ready for review` or `Ready to send` means
+the bounded request was placed in the composer. Verify Codex/OpenCode in
+Claudian, review the prompt, then press Send yourself. Dashboard cannot report
+running/completed/failed Agent execution without a supported Claudian signal.
+
+For course, paper, or book creation, press Send once after checking the target.
+That workflow is instructed to run its path preflight and create one note
+without asking for another plan/diff confirmation. Other write workflows still
+pause for review before modifying existing notes.
+
+## Academic note creation reports an ambiguous destination
+
+Dashboard found equally suitable related names in more than one directory
+under the configured `Course`, `Paper`, or `Reading` root. It stops instead of
+guessing. Use a more specific title, organize the related material manually, or
+temporarily choose a narrower destination in settings. Dashboard does not move
+existing PDFs or notes and never overwrites the target Markdown file.
 
 ## Authentication or model problems
 

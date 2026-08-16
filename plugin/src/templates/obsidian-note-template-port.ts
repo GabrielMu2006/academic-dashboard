@@ -1,48 +1,44 @@
 import { App, normalizePath, TFile, TFolder } from 'obsidian';
-import type { NoteTemplatePort } from './note-template-service';
+import { createObsidianConservativeWritePort } from '../adapters/obsidian-conservative-write-port';
+import type { ConservativeWritePort } from '../core/conservative-writes';
+import type {
+	NoteDestinationEntry,
+	NoteTemplatePort,
+} from './note-template-service';
 
-export function createObsidianNoteTemplatePort(app: App): NoteTemplatePort {
-	const isConfigTarget = (path: string): boolean => {
-		const normalized = normalizePath(path);
-		const config = normalizePath(app.vault.configDir).replace(/\/$/u, '');
-		return normalized === config || normalized.startsWith(`${config}/`);
-	};
+function isVisiblePath(path: string): boolean {
+	return path.split('/').every((segment) => segment.length > 0 && !segment.startsWith('.'));
+}
+
+export function createObsidianNoteTemplatePort(
+	app: App,
+	writes: ConservativeWritePort = createObsidianConservativeWritePort(app),
+): NoteTemplatePort {
 	return {
-		read: async (path) => {
-			if (isConfigTarget(path)) return null;
-			const file = app.vault.getAbstractFileByPath(normalizePath(path));
-			if (file === null) return null;
-			if (!(file instanceof TFile) || file.extension !== 'md') return null;
-			return app.vault.cachedRead(file);
-		},
-		compareAndSwap: async () => 'conflict',
-		ensureFolder: async (path) => {
-			if (isConfigTarget(path)) {
-				throw new Error('Vault configuration directories are forbidden.');
+		...writes,
+		listDescendants: async (folder) => {
+			const normalized = normalizePath(folder);
+			if (!isVisiblePath(normalized)) return Object.freeze([]);
+			const root = app.vault.getAbstractFileByPath(normalized);
+			if (root === null) return Object.freeze([]);
+			if (!(root instanceof TFolder)) {
+				throw new Error('The configured destination is blocked by a file.');
 			}
-			let current = '';
-			for (const segment of normalizePath(path).split('/')) {
-				current = current ? `${current}/${segment}` : segment;
-				const existing = app.vault.getAbstractFileByPath(current);
-				if (existing instanceof TFolder) continue;
-				if (existing !== null) {
-					throw new Error('A file blocks the configured destination folder.');
+			const entries: NoteDestinationEntry[] = [];
+			const visit = (current: TFolder): void => {
+				for (const child of current.children) {
+					if (!isVisiblePath(child.path)) continue;
+					if (child instanceof TFolder) {
+						entries.push(Object.freeze({ path: child.path, kind: 'folder' }));
+						visit(child);
+					} else if (child instanceof TFile) {
+						entries.push(Object.freeze({ path: child.path, kind: 'file' }));
+					}
 				}
-				await app.vault.createFolder(current);
-			}
-		},
-		createExclusive: async (path, content) => {
-			if (isConfigTarget(path)) return 'exists';
-			const normalized = normalizePath(path);
-			if (app.vault.getAbstractFileByPath(normalized) !== null) return 'exists';
-			try {
-				await app.vault.create(normalized, content);
-				return 'created';
-			} catch {
-				return app.vault.getAbstractFileByPath(normalized) === null
-					? Promise.reject(new Error('Vault create failed.'))
-					: 'exists';
-			}
+			};
+			visit(root);
+			entries.sort((left, right) => left.path.localeCompare(right.path));
+			return Object.freeze(entries);
 		},
 	};
 }

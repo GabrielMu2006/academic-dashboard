@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	CREATE_BOOK_READING_NOTE_COMMAND,
 	CREATE_COURSE_NOTE_COMMAND,
 	CREATE_PAPER_READING_NOTE_COMMAND,
 	DASHBOARD_VIEW_TITLE,
@@ -31,6 +32,7 @@ describe('dashboard lifecycle constants', () => {
 	it('exposes stable narrow note-creation command ids', () => {
 		expect(CREATE_COURSE_NOTE_COMMAND).toBe('create-course-note');
 		expect(CREATE_PAPER_READING_NOTE_COMMAND).toBe('create-paper-reading-note');
+		expect(CREATE_BOOK_READING_NOTE_COMMAND).toBe('create-book-reading-note');
 	});
 });
 

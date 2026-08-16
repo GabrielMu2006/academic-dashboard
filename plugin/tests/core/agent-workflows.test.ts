@@ -16,10 +16,11 @@ describe('Agent workflow contracts', () => {
 			'organize-daily-note-into-academic-notes',
 			'create-course-note',
 			'create-paper-reading-note',
+			'create-book-reading-note',
 		]);
 	});
 
-	it('marks read-only and proposed-write boundaries explicitly', () => {
+	it('marks read-only, proposed-write, and direct-write boundaries explicitly', () => {
 		expect(getAgentWorkflow('summarize-current-note')).toMatchObject({
 			access: 'read-only',
 			scope: 'current-note',
@@ -37,7 +38,15 @@ describe('Agent workflow contracts', () => {
 			scope: 'current-note',
 		});
 		expect(getAgentWorkflow('create-course-note')).toMatchObject({
-			access: 'proposed-write',
+			access: 'direct-write',
+			scope: 'new-note',
+		});
+		expect(getAgentWorkflow('create-paper-reading-note')).toMatchObject({
+			access: 'direct-write',
+			scope: 'new-note',
+		});
+		expect(getAgentWorkflow('create-book-reading-note')).toMatchObject({
+			access: 'direct-write',
 			scope: 'new-note',
 		});
 	});

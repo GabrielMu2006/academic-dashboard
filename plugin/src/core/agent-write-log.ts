@@ -21,6 +21,7 @@ import {
 
 export const AGENT_WRITE_LOG_OUTCOMES = [
 	'prepared-for-review',
+	'prepared-to-send',
 	'opened-without-prefill',
 	'handoff-failed',
 ] as const;
@@ -129,7 +130,7 @@ export function agentWriteLogEntryForHandoff(
 	result: ClaudianHandoffResult,
 	now: Date,
 ): AgentWriteLogEntry | null {
-	if (getAgentWorkflow(request.workflowId).access !== 'proposed-write') return null;
+	if (getAgentWorkflow(request.workflowId).access === 'read-only') return null;
 	const affectedPaths = [
 		request.currentNotePath,
 		request.requestedDestination,
@@ -141,9 +142,11 @@ export function agentWriteLogEntryForHandoff(
 		affectedPaths,
 		outcome: result.status === 'ready-for-review'
 			? 'prepared-for-review'
+			: result.status === 'ready-to-send'
+				? 'prepared-to-send'
 			: result.status === 'opened-without-prefill'
-				? 'opened-without-prefill'
-				: 'handoff-failed',
+					? 'opened-without-prefill'
+					: 'handoff-failed',
 		...(result.errorCode ? { errorCode: result.errorCode } : {}),
 	};
 	const validated = validateAgentWriteLog([candidate]);

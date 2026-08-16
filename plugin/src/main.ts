@@ -36,6 +36,7 @@ import {
 	DASHBOARD_VIEW_ICON,
 	DASHBOARD_VIEW_TITLE,
 	DASHBOARD_VIEW_TYPE,
+	CREATE_BOOK_READING_NOTE_COMMAND,
 	CREATE_COURSE_NOTE_COMMAND,
 	CREATE_PAPER_READING_NOTE_COMMAND,
 	OPEN_DASHBOARD_COMMAND,
@@ -63,6 +64,7 @@ import { registerReviewQueueWidget } from './widgets/review-queue-widget';
 import { registerAgentWidgets } from './widgets/agent-widgets';
 import { NoteCreationModal } from './templates/note-creation-modal';
 import { NoteTemplateService, type NoteCreationKind } from './templates/note-template-service';
+import { createObsidianNoteTemplatePort } from './templates/obsidian-note-template-port';
 import {
 	DailyNoteService,
 	dailyNotePathForDate,
@@ -142,7 +144,7 @@ export default class AcademicDashboardPlugin extends Plugin {
 		};
 		this.localWrites = new ConservativeWriteService(conservativePort, writeOptions);
 		const noteTemplates = new NoteTemplateService(
-			conservativePort,
+			createObsidianNoteTemplatePort(this.app, conservativePort),
 			() => this.layoutStore?.getTemplateSettings() ?? restored.settings.templates,
 			() => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
 			() => new Date(),
@@ -334,7 +336,9 @@ export default class AcademicDashboardPlugin extends Plugin {
 					this.layoutStore?.getTemplateSettings() ?? restored.settings.templates;
 				const setting = workflowId === 'create-course-note'
 					? templates.courseNote
-					: templates.paperReading;
+					: workflowId === 'create-paper-reading-note'
+						? templates.paperReading
+						: templates.bookReading;
 				return {
 					...(setting.source === 'vault' && setting.vaultTemplatePath
 						? { templatePath: setting.vaultTemplatePath }
@@ -426,6 +430,12 @@ export default class AcademicDashboardPlugin extends Plugin {
 			CREATE_PAPER_READING_NOTE_COMMAND,
 			'Create paper-reading note',
 			'paper-reading',
+			noteTemplates,
+		);
+		this.addNoteCreationCommand(
+			CREATE_BOOK_READING_NOTE_COMMAND,
+			'Create book-reading note',
+			'book-reading',
 			noteTemplates,
 		);
 
@@ -541,8 +551,11 @@ export default class AcademicDashboardPlugin extends Plugin {
 		service: NoteTemplateService,
 	): void {
 		const templates = this.layoutStore?.getTemplateSettings();
-		const setting =
-			kind === 'course-note' ? templates?.courseNote : templates?.paperReading;
+		const setting = kind === 'course-note'
+			? templates?.courseNote
+			: kind === 'paper-reading'
+				? templates?.paperReading
+				: templates?.bookReading;
 		if (!setting) return;
 		new NoteCreationModal(this.app, {
 			kind,

@@ -6,7 +6,10 @@ import { DEFAULT_AGENT_SETTINGS } from '../../src/core/agent-settings';
 import { DEFAULT_LOCAL_WRITE_SETTINGS } from '../../src/core/local-write-settings';
 import { DEFAULT_GITHUB_SETTINGS } from '../../src/core/github-settings';
 import { DEFAULT_LOCALE_SETTINGS } from '../../src/core/localization';
-import { validateDashboardSettings } from '../../src/core/settings';
+import {
+	SETTINGS_SCHEMA_VERSION,
+	validateDashboardSettings,
+} from '../../src/core/settings';
 import {
 	PageLayoutStore,
 	restoreLayoutStoreData,
@@ -15,7 +18,7 @@ import {
 
 function initialSettings() {
 	const result = validateDashboardSettings({
-		schemaVersion: 5,
+		schemaVersion: SETTINGS_SCHEMA_VERSION,
 		defaultPage: 'home',
 		layouts: DEFAULT_LAYOUT_STATE,
 		metadata: DEFAULT_METADATA_SETTINGS,

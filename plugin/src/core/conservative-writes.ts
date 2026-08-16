@@ -9,6 +9,7 @@ export const LOCAL_WRITE_OPERATION_TYPES = [
 	'create-daily-note',
 	'create-course-note',
 	'create-paper-note',
+	'create-book-note',
 ] as const;
 
 export type LocalWriteOperationType =
@@ -88,7 +89,8 @@ export interface CreationRequest {
 	readonly operation:
 		| 'create-daily-note'
 		| 'create-course-note'
-		| 'create-paper-note';
+		| 'create-paper-note'
+		| 'create-book-note';
 	readonly path: string;
 	readonly content: string;
 }

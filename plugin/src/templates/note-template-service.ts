@@ -15,9 +15,16 @@ import {
 	type NoteTemplateSetting,
 } from '../core/template-settings';
 
-export type NoteCreationKind = 'course-note' | 'paper-reading';
+export type NoteCreationKind = 'course-note' | 'paper-reading' | 'book-reading';
 
-export type NoteTemplatePort = ConservativeWritePort;
+export interface NoteDestinationEntry {
+	readonly path: string;
+	readonly kind: 'file' | 'folder';
+}
+
+export interface NoteTemplatePort extends ConservativeWritePort {
+	listDescendants(folder: string): Promise<readonly NoteDestinationEntry[]>;
+}
 
 export interface NoteCreationRequest {
 	readonly kind: NoteCreationKind;
@@ -41,6 +48,7 @@ export class NoteCreationError extends Error {
 		readonly code:
 			| 'invalid_title'
 			| 'invalid_destination'
+			| 'ambiguous_destination'
 			| 'template_unavailable'
 			| 'note_exists'
 			| 'create_failed',
@@ -81,6 +89,60 @@ function validateTitle(input: string): string {
 
 function yamlQuoted(value: string): string {
 	return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function settingForKind(
+	settings: AcademicTemplateSettings,
+	kind: NoteCreationKind,
+): NoteTemplateSetting {
+	switch (kind) {
+		case 'course-note': return settings.courseNote;
+		case 'paper-reading': return settings.paperReading;
+		case 'book-reading': return settings.bookReading;
+	}
+}
+
+function operationForKind(
+	kind: NoteCreationKind,
+): 'create-course-note' | 'create-paper-note' | 'create-book-note' {
+	switch (kind) {
+		case 'course-note': return 'create-course-note';
+		case 'paper-reading': return 'create-paper-note';
+		case 'book-reading': return 'create-book-note';
+	}
+}
+
+function relatedNameKey(value: string): string {
+	return value
+		.normalize('NFKC')
+		.toLocaleLowerCase()
+		.replace(/[\p{P}\p{S}\s_-]+/gu, ' ')
+		.trim();
+}
+
+function entryName(entry: NoteDestinationEntry): string {
+	const name = entry.path.split('/').at(-1) ?? '';
+	if (entry.kind === 'folder') return name;
+	const extensionAt = name.lastIndexOf('.');
+	return extensionAt > 0 ? name.slice(0, extensionAt) : name;
+}
+
+function containingFolder(entry: NoteDestinationEntry, fallback: string): string {
+	if (entry.kind === 'folder') return entry.path;
+	const separatorAt = entry.path.lastIndexOf('/');
+	return separatorAt > 0 ? entry.path.slice(0, separatorAt) : fallback;
+}
+
+function relatedScore(
+	entry: NoteDestinationEntry,
+	titleKey: string,
+): number | null {
+	const candidate = relatedNameKey(entryName(entry));
+	if (candidate === titleKey) return entry.kind === 'folder' ? 0 : 1;
+	if (titleKey.length >= 4 && candidate.startsWith(`${titleKey} `)) {
+		return entry.kind === 'file' ? 2 : 3;
+	}
+	return null;
 }
 
 function templateValues(
@@ -132,15 +194,27 @@ export class NoteTemplateService {
 	async preview(request: NoteCreationRequest): Promise<NoteCreationPreview> {
 		const title = validateTitle(request.title);
 		const settings = this.getTemplates();
-		const template =
-			request.kind === 'course-note' ? settings.courseNote : settings.paperReading;
+		const template = settingForKind(settings, request.kind);
 		if (!isSafeVaultRelativePath(template.destinationFolder)) {
 			throw new NoteCreationError(
 				'invalid_destination',
 				'The configured destination folder is not a safe Vault-relative path.',
 			);
 		}
-		const path = `${template.destinationFolder}/${title}.md`;
+		let destinationFolder: string;
+		try {
+			destinationFolder = await this.resolveDestinationFolder(
+				template.destinationFolder,
+				title,
+			);
+		} catch (error) {
+			if (error instanceof NoteCreationError) throw error;
+			throw new NoteCreationError(
+				'create_failed',
+				'The destination folder could not be inspected safely.',
+			);
+		}
+		const path = `${destinationFolder}/${title}.md`;
 		const source = await this.resolveTemplate(template);
 		const content = renderTemplate(
 			source,
@@ -149,10 +223,7 @@ export class NoteTemplateService {
 
 		try {
 			const prepared = await this.writes.prepareCreation({
-				operation:
-					request.kind === 'course-note'
-						? 'create-course-note'
-						: 'create-paper-note',
+				operation: operationForKind(request.kind),
 				path,
 				content,
 			});
@@ -165,6 +236,41 @@ export class NoteTemplateService {
 		} catch (error) {
 			throw this.creationError(error, path);
 		}
+	}
+
+	private async resolveDestinationFolder(
+		baseFolder: string,
+		title: string,
+	): Promise<string> {
+		const titleKey = relatedNameKey(title);
+		if (relatedNameKey(baseFolder.split('/').at(-1) ?? '') === titleKey) {
+			return baseFolder;
+		}
+		const scored = (await this.port.listDescendants(baseFolder))
+			.map((entry) => ({ entry, score: relatedScore(entry, titleKey) }))
+			.filter(
+				(candidate): candidate is { entry: NoteDestinationEntry; score: number } =>
+					candidate.score !== null,
+			)
+			.sort(
+				(left, right) =>
+					left.score - right.score || left.entry.path.localeCompare(right.entry.path),
+			);
+		if (scored.length === 0) return `${baseFolder}/${title}`;
+
+		const bestScore = scored[0]!.score;
+		const folders = new Set(
+			scored
+				.filter(({ score }) => score === bestScore)
+				.map(({ entry }) => containingFolder(entry, baseFolder)),
+		);
+		if (folders.size !== 1) {
+			throw new NoteCreationError(
+				'ambiguous_destination',
+				'Multiple matching folders or files were found. Choose a more specific title or destination.',
+			);
+		}
+		return [...folders][0]!;
 	}
 
 	async confirm(preview: NoteCreationPreview): Promise<NoteCreationResult> {

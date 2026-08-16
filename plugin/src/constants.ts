@@ -9,3 +9,4 @@ export const DASHBOARD_VIEW_ICON = 'layout-grid';
 export const OPEN_DASHBOARD_COMMAND = 'open-dashboard';
 export const CREATE_COURSE_NOTE_COMMAND = 'create-course-note';
 export const CREATE_PAPER_READING_NOTE_COMMAND = 'create-paper-reading-note';
+export const CREATE_BOOK_READING_NOTE_COMMAND = 'create-book-reading-note';

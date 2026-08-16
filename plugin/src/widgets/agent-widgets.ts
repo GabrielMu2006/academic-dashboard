@@ -17,7 +17,7 @@ import { t, translateEnglishSource } from '../core/localization';
 
 export interface AgentCreationContext {
 	readonly templatePath?: string;
-	readonly destination?: string;
+	readonly destination: string;
 }
 
 export interface AgentWidgetServices {
@@ -28,7 +28,10 @@ export interface AgentWidgetServices {
 	readonly dailyNotePath: () => string | null;
 	readonly academicMetadata: () => MetadataSettings;
 	readonly creationContext: (
-		workflowId: 'create-course-note' | 'create-paper-reading-note',
+		workflowId:
+			| 'create-course-note'
+			| 'create-paper-reading-note'
+			| 'create-book-reading-note',
 	) => AgentCreationContext;
 	readonly onHandoff?: (
 		request: AgentWorkflowRequest,
@@ -189,7 +192,9 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 			document,
 			'div',
 			'academic-dashboard-agent__handoff',
-			unavailable ?? 'Requests are prepared for review and are never auto-sent.',
+			unavailable ?? (getAgentWorkflow(this.workflowId).access === 'direct-write'
+				? t('agent.directWriteStatus')
+				: t('agent.reviewBoundary')),
 		);
 		handoffStatus.setAttribute('aria-live', 'polite');
 
@@ -230,14 +235,17 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		if (this.workflowId === 'organize-daily-note-into-academic-notes') return t('agent.dailyRoutingFocus');
 		if (this.workflowId === 'create-course-note') return 'Course note title';
 		if (this.workflowId === 'create-paper-reading-note') return 'Paper-reading note title';
+		if (this.workflowId === 'create-book-reading-note') return t('agent.bookTitlePlaceholder');
 		return 'Optional focus or constraints (note content is not stored here)';
 	}
 
 	private workflowBoundary(): string {
 		const workflow = getAgentWorkflow(this.workflowId);
 		return workflow.access === 'read-only'
-			? 'Read-only: the result stays in Claudian chat.'
-			: 'Proposed write: Claudian must show a plan or diff and wait for approval.';
+			? t('agent.readOnlyBoundary')
+			: workflow.access === 'direct-write'
+				? t('agent.directWriteBoundary')
+				: t('agent.writeBoundary');
 	}
 
 	private workflowUnavailable(): string | null {
@@ -269,14 +277,17 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		}
 		if (definition.scope === 'new-note') {
 			const creation = this.services.creationContext(
-				this.workflowId as 'create-course-note' | 'create-paper-reading-note',
+				this.workflowId as
+					| 'create-course-note'
+					| 'create-paper-reading-note'
+					| 'create-book-reading-note',
 			);
 			return {
 				workflowId: this.workflowId,
 				target,
 				userInput: this.input.trim(),
 				...(creation.templatePath ? { templatePath: creation.templatePath } : {}),
-				...(creation.destination ? { requestedDestination: creation.destination } : {}),
+				requestedDestination: creation.destination,
 			};
 		}
 		return { workflowId: this.workflowId, target, userInput: this.input.trim() };
@@ -319,7 +330,16 @@ export class AgentWorkflowCatalogWidget implements WidgetLifecycle {
 			const item = element(document, 'li', 'academic-dashboard-agent-workflows__item');
 			item.append(
 				element(document, 'strong', '', workflow.title),
-				element(document, 'span', '', workflow.access === 'read-only' ? 'Read only' : 'Review before write'),
+				element(
+					document,
+					'span',
+					'',
+					workflow.access === 'read-only'
+						? t('agent.readOnly')
+						: workflow.access === 'direct-write'
+							? t('agent.directWrite')
+							: t('agent.reviewBeforeWrite'),
+				),
 			);
 			list.append(item);
 		}

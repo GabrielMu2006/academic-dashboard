@@ -38,6 +38,7 @@ export interface AgentWorkflowRequest {
 export type ClaudianHandoffStatus =
 	| 'preparing'
 	| 'ready-for-review'
+	| 'ready-to-send'
 	| 'opened-without-prefill'
 	| 'failed';
 
