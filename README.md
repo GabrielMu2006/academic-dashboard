@@ -11,26 +11,39 @@ have, adapts to your frontmatter conventions, and keeps optional integrations
 optional. It does not scrape for papers, create a second Agent runtime, or
 silently reorganize a Vault.
 
-> Current version: **0.2.0**<br>
+> Current source version: **0.3.0**<br>
 > Minimum Obsidian version: **1.11.4**<br>
 > Platform: **Obsidian Desktop**; macOS is the primary acceptance platform<br>
-> Release status: **[GitHub release 0.2.0](https://github.com/GabrielMu2006/academic-dashboard/releases/tag/0.2.0)**
+> Latest published release: **[0.3.0](https://github.com/GabrielMu2006/academic-dashboard/releases/tag/0.3.0)**
 
 ## What it provides
 
 ### Home
 
 - Date and time, calendar, recent notes, and local daily quote.
-- Today's Native Markdown tasks with an optional Tasks-plugin read adapter.
+- Native Markdown tasks grouped into overdue, today, and the next seven days,
+  plus up to three user-selected Today Focus references.
 - Recent papers and due-review summaries based on configurable metadata.
 - Quick links, frequently used Obsidian commands, and an Agent entry point.
 - Review-first creation of one Daily Note, course note, paper-reading note, or
   book-reading note.
 - Exact Native Markdown task completion with current-session conditional Undo.
+- Editable weekly review draft for the local Monday-to-Sunday window. It lists
+  retained Dashboard write events, Agent handoffs, and notes whose file
+  modification time falls in the week, then exclusively creates one note under
+  `Weekly Reviews` after a second review.
 
 ### Study
 
+- Course Overview grouped by exact course and term, with course notes, related
+  resources, due tasks, and due reviews in one read-only detail view. Each
+  result states whether it came from metadata or the configured course root.
+- Automatic course-folder buttons generated from the configured course-note
+  destination. Clicking reveals and expands that folder in the File explorer;
+  buttons refresh when folders change.
 - Native Markdown review queue with an optional Spaced Repetition read adapter.
+- Bounded 10/20-item review sessions filtered by course and type, with explicit
+  viewed, skipped, source-open, and safe Native next-date actions.
 - Local Obsidian activity derived from Markdown modification dates.
 - Optional GitHub contribution calendar with explicit refresh and stale states.
 - Bounded review-date updates for one unambiguous Native Markdown marker, with
@@ -38,8 +51,14 @@ silently reorganize a Vault.
 
 ### Research
 
+- Unified paper/book reading queue with plugin-side status, manual ordering,
+  next step, and page/chapter/stage position. Stable IDs and edition-aware
+  signatures reconnect renamed notes without merging books by title alone.
 - Search and filter existing paper notes by mapped title, author, venue, DOI,
-  year, and reading status.
+  year, reading status, and tags. Save up to 12 reproducible pinned views and
+  page through a clearly bounded visible result count.
+- Explainable related-material links based only on the mapped explicit relation
+  field or an exact shared tag.
 - Optional Bases custom view where the supported public API is available.
 - One-paper status and favorite controls with conflict detection and
   current-session conditional Undo.
@@ -52,9 +71,16 @@ silently reorganize a Vault.
   Markdown, search the Vault, route today's Daily Note into existing academic
   notes, create a course note, create a paper-reading note, or create a
   book-reading note.
-- Open and prefill the request in Claudian. Existing-note writes remain
+- Preview the workflow, requested target, related paths, resolved creation
+  location, and bounded context size locally before opening Claudian. Editing
+  the request invalidates the preview and requires a fresh review.
+- Open and prefill the reviewed request in Claudian. Existing-note writes remain
   review-first; the three single-note creation workflows run after path checks
   without asking for a second confirmation.
+- Review the five newest retained request records and prepare the same workflow
+  and target again without restoring request text or sending automatically.
+  Prefilled/waiting, opened-only, failed, and user-marked completion states stay
+  distinct; current Claudian compatibility provides no verified execution result.
 - Keep provider, model, authentication, permissions, sending, and execution in
   Claudian and the selected Agent rather than duplicating those controls.
 
@@ -65,7 +91,7 @@ silently reorganize a Vault.
 | Obsidian Desktop 1.11.4+ | Yes | Plugin host and SecretStorage API |
 | Claudian | Agent page only | Review and hand off Agent workflows |
 | Codex or OpenCode | Agent execution only | Selected target behind Claudian |
-| Tasks | No | Optional task read adapter; Native Markdown remains available |
+| Tasks | No | Capability detection remains available; the grouped Home task window uses Native Markdown for exact source identity |
 | Spaced Repetition | No | Optional review read adapter; Native Markdown remains available |
 | Bases | No | Optional Academic Papers custom view |
 | PaperPulse Academic | No | Optional visual integration through public theme variables |
@@ -79,7 +105,7 @@ than preventing the plugin from loading.
 
 ### From a GitHub release
 
-After a release is published, download these three files from the same release:
+Download these three files from the same published release:
 
 ```text
 main.js
@@ -99,6 +125,10 @@ Create the plugin folder and copy the files into it:
 In Obsidian Desktop, open **Settings → Community plugins**, enable
 **Academic Dashboard**, then run **Academic Dashboard: Open dashboard** from the
 command palette.
+
+Release 0.3.0 was installed and exercised on Obsidian Desktop 1.13.7 on macOS,
+including an in-place settings migration from schema 6 to schema 7 and a render
+check of the Home, Study, Research, and Agent pages.
 
 Do not download, publish, or copy a `data.json`. Obsidian creates that file for
 each Vault to hold its own settings and layouts.
@@ -128,13 +158,16 @@ Vault's settings and layouts and is migrated conservatively by the plugin.
    visible Widgets.
 2. Review **Academic metadata** mappings so course, paper, and book notes match your
    existing frontmatter rather than being migrated.
-3. Configure Daily Note destinations and course/paper/book templates if you want
+3. Optionally enter the exact **Current term** used in your course metadata so
+   same-name courses from different terms remain separate in Course Overview.
+4. Configure Daily Note destinations and course/paper/book templates if you want
    local review-first note creation. The default roots are `Course`, `Paper`,
    and `Reading`.
-4. Optionally set a Vault-relative local quote file such as
+5. Optionally set a Vault-relative local quote file such as
    `每日引言.md` at the Vault root. Each non-empty, non-heading line is one quote, up to 366
    entries.
-5. Optionally configure GitHub contributions and Claudian as described below.
+6. Optionally add up to three Today Focus note references, or pin tasks from Home.
+7. Optionally configure GitHub contributions and Claudian as described below.
 
 Changing a metadata mapping affects future reads and actions only. Academic
 Dashboard does not rewrite a Vault to enforce its recommended schema.

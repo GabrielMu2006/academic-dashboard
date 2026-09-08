@@ -1,5 +1,7 @@
 import type { AgentSettings } from '../core/agent-settings';
 import type { MetadataSettings } from '../core/metadata-settings';
+import { buildAgentWorkflowPrompt } from '../core/agent-workflow-prompts';
+import type { AgentWriteLogEntry } from '../core/agent-write-log';
 import {
 	AGENT_WORKFLOWS,
 	getAgentWorkflow,
@@ -29,6 +31,9 @@ export interface AgentWidgetServices {
 	readonly activeNotePath: () => string | null;
 	readonly dailyNotePath: () => string | null;
 	readonly academicMetadata: () => MetadataSettings;
+	readonly getRequestLog: () => readonly AgentWriteLogEntry[];
+	readonly markRequestComplete: (entry: AgentWriteLogEntry) => boolean;
+	readonly openNote: (path: string) => Promise<void>;
 	readonly creationContext: (
 		workflowId:
 			| 'create-course-note'
@@ -60,6 +65,39 @@ function element<K extends keyof HTMLElementTagNameMap>(
 
 function targetLabel(target: AgentTarget): string {
 	return target === 'codex' ? 'Codex' : 'OpenCode';
+}
+
+export interface AgentHandoffPreview {
+	readonly request: AgentWorkflowRequest;
+	readonly workflowTitle: string;
+	readonly access: 'read-only' | 'proposed-write' | 'direct-write';
+	readonly paths: readonly string[];
+	readonly requestedDestination?: string;
+	readonly resolvedNotePath?: string;
+	readonly contextCharacters: number;
+	readonly userInputCharacters: number;
+	readonly templateCharacters: number;
+}
+
+export function buildAgentHandoffPreview(request: AgentWorkflowRequest): AgentHandoffPreview {
+	const definition = getAgentWorkflow(request.workflowId);
+	const prompt = buildAgentWorkflowPrompt(request);
+	const paths = [...new Set([
+		request.currentNotePath,
+		request.templatePath,
+		request.resolvedNotePath,
+	].filter((path): path is string => Boolean(path)))];
+	return Object.freeze({
+		request,
+		workflowTitle: definition.title,
+		access: definition.access,
+		paths: Object.freeze(paths),
+		...(request.requestedDestination ? { requestedDestination: request.requestedDestination } : {}),
+		...(request.resolvedNotePath ? { resolvedNotePath: request.resolvedNotePath } : {}),
+		contextCharacters: prompt.length,
+		userInputCharacters: request.userInput?.length ?? 0,
+		templateCharacters: request.templateContent?.length ?? 0,
+	});
 }
 
 export class AgentStatusWidget implements WidgetLifecycle {
@@ -123,6 +161,9 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 	private workflowId: AgentWorkflowId = 'summarize-current-note';
 	private input = '';
 	private busy = false;
+	private preview: AgentHandoffPreview | null = null;
+	private handoffButton: HTMLButtonElement | null = null;
+	private lastStatus: { readonly text: string; readonly state: string } | null = null;
 
 	constructor(private readonly services: AgentWidgetServices) {}
 
@@ -138,6 +179,7 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		this.events?.abort();
 		this.events = new AbortController();
 		this.context = context;
+		this.handoffButton = null;
 		context.contentEl.replaceChildren();
 		const document = context.contentEl.ownerDocument;
 		const form = element(document, 'form', 'academic-dashboard-agent-form');
@@ -186,7 +228,7 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 			document,
 			'button',
 			'academic-dashboard-agent__button',
-			this.busy ? 'Preparing…' : 'Prepare handoff',
+			this.busy ? t('agent.preparing') : t('agent.previewRequest'),
 		);
 		button.type = 'button';
 		const unavailable = this.workflowUnavailable();
@@ -195,11 +237,12 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 			document,
 			'div',
 			'academic-dashboard-agent__handoff',
-			unavailable ?? (getAgentWorkflow(this.workflowId).access === 'direct-write'
+			unavailable ?? this.lastStatus?.text ?? (getAgentWorkflow(this.workflowId).access === 'direct-write'
 				? t('agent.directWriteStatus')
 				: t('agent.reviewBoundary')),
 		);
 		handoffStatus.setAttribute('aria-live', 'polite');
+		if (this.lastStatus) handoffStatus.setAttribute('data-status', this.lastStatus.state);
 
 		target.addEventListener('change', () => {
 			const settings = this.services.getAgentSettings();
@@ -207,6 +250,9 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 				...settings,
 				selectedTarget: target.value as AgentTarget,
 			})) {
+				this.preview = null;
+				if (this.handoffButton) this.handoffButton.disabled = true;
+				this.lastStatus = null;
 				handoffStatus.textContent = t('agent.selectedConfirm', {
 					target: targetLabel(target.value as AgentTarget),
 				});
@@ -215,20 +261,33 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		workflow.addEventListener('change', () => {
 			this.workflowId = workflow.value as AgentWorkflowId;
 			this.input = input.value;
+			this.preview = null;
+			this.lastStatus = null;
 			this.render(context);
 		}, { signal: this.events.signal });
-		input.addEventListener('input', () => { this.input = input.value; }, {
+		input.addEventListener('input', () => {
+			this.input = input.value;
+			if (this.preview) {
+				this.preview = null;
+				if (this.handoffButton) this.handoffButton.disabled = true;
+				this.lastStatus = { text: t('agent.previewStale'), state: 'stale' };
+				handoffStatus.textContent = this.lastStatus.text;
+				handoffStatus.setAttribute('data-status', 'stale');
+			}
+		}, {
 			signal: this.events.signal,
 		});
 		button.addEventListener('click', () => {
-			void this.handoff(button, handoffStatus);
+			void this.preparePreview(button, handoffStatus);
 		}, { signal: this.events.signal });
 		form.addEventListener('submit', (event) => {
 			event.preventDefault();
-			void this.handoff(button, handoffStatus);
+			void this.preparePreview(button, handoffStatus);
 		}, { signal: this.events.signal });
 
 		form.append(row, inputField, boundary, button, handoffStatus);
+		if (this.preview) form.append(this.renderPreview(document, this.preview));
+		form.append(this.renderHistory(document));
 		context.contentEl.append(form);
 		context.setState({ status: 'ready' });
 	}
@@ -301,30 +360,109 @@ export class AgentWorkflowWidget implements WidgetLifecycle {
 		return { workflowId: this.workflowId, target, userInput: this.input.trim() };
 	}
 
-	private async handoff(button: HTMLButtonElement, status: HTMLElement): Promise<void> {
+	private async preparePreview(button: HTMLButtonElement, status: HTMLElement): Promise<void> {
 		if (this.busy) return;
 		this.busy = true;
 		button.disabled = true;
-		button.textContent = 'Preparing…';
-		status.textContent = 'Opening handoff…';
+		button.textContent = t('agent.preparing');
+		status.textContent = t('agent.preparingPreview');
 		try {
 			const request = await this.request();
-			const result = await this.services.claudian.handoff(request);
-			await this.services.onHandoff?.(request, result);
-			if (!this.context) return;
-			status.textContent = result.message;
-			status.setAttribute('data-status', result.status);
+			this.preview = buildAgentHandoffPreview(request);
+			this.lastStatus = { text: t('agent.state.prepared'), state: 'prepared' };
+			if (this.context) this.render(this.context);
 		} catch (error) {
-			status.textContent = error instanceof Error
+			this.preview = null;
+			const text = error instanceof Error
 				? error.message
 				: 'The workflow handoff could not be prepared.';
+			this.lastStatus = { text, state: 'failed' };
+			status.textContent = text;
 			status.setAttribute('data-status', 'failed');
 		} finally {
 			this.busy = false;
-			button.disabled = this.workflowUnavailable() !== null;
-			button.textContent = t('agent.prepare');
-			button.focus();
+			if (this.context && !this.preview) {
+				button.disabled = this.workflowUnavailable() !== null;
+				button.textContent = t('agent.previewRequest');
+				button.focus();
+			}
 		}
+	}
+
+	private renderPreview(document: Document, preview: AgentHandoffPreview): HTMLElement {
+		const panel = element(document, 'section', 'academic-dashboard-agent-preview');
+		panel.append(
+			element(document, 'strong', 'academic-dashboard-agent-preview__title', t('agent.previewTitle')),
+			element(document, 'div', 'academic-dashboard-agent-preview__meta', t('agent.previewWorkflow', { workflow: preview.workflowTitle, target: targetLabel(preview.request.target) })),
+			element(document, 'div', 'academic-dashboard-agent-preview__meta', t('agent.previewSize', { total: preview.contextCharacters, request: preview.userInputCharacters, template: preview.templateCharacters })),
+			element(document, 'div', 'academic-dashboard-agent-preview__meta', t('agent.previewAccess', { access: preview.access })),
+		);
+		if (preview.requestedDestination) panel.append(element(document, 'div', 'academic-dashboard-agent-preview__meta', t('agent.previewDestination', { destination: preview.requestedDestination })));
+		if (preview.resolvedNotePath) panel.append(element(document, 'div', 'academic-dashboard-agent-preview__meta', t('agent.previewResolved', { path: preview.resolvedNotePath })));
+		const paths = element(document, 'div', 'academic-dashboard-agent-preview__paths');
+		paths.append(element(document, 'span', 'academic-dashboard-agent-preview__label', t('agent.previewPaths')));
+		if (preview.paths.length === 0) paths.append(element(document, 'span', '', t('agent.noPath')));
+		for (const path of preview.paths) {
+			const open = element(document, 'button', 'academic-dashboard-agent-preview__path', path); open.type = 'button'; open.title = path;
+			open.addEventListener('click', () => { void this.services.openNote(path); }, { signal: this.events?.signal }); paths.append(open);
+		}
+		const explanation = element(document, 'p', 'academic-dashboard-agent__copy', t('agent.previewEditHelp'));
+		const send = element(document, 'button', 'academic-dashboard-agent__button mod-cta', t('agent.prefillClaudian')); send.type = 'button';
+		this.handoffButton = send;
+		send.addEventListener('click', () => { void this.handoffPreview(preview, send); }, { signal: this.events?.signal });
+		panel.append(paths, explanation, send); return panel;
+	}
+
+	private async handoffPreview(preview: AgentHandoffPreview, button: HTMLButtonElement): Promise<void> {
+		if (this.busy || this.preview !== preview) return;
+		this.busy = true; button.disabled = true; button.textContent = t('agent.openingHandoff');
+		try {
+			const result = await this.services.claudian.handoff(preview.request);
+			await this.services.onHandoff?.(preview.request, result);
+			this.lastStatus = result.status === 'ready-for-review' || result.status === 'ready-to-send'
+				? { text: t('agent.state.waitingUserSend'), state: 'waiting-user-send' }
+				: result.status === 'opened-without-prefill'
+					? { text: t('agent.state.openedOnly'), state: 'opened-only' }
+					: { text: result.message, state: 'failed' };
+		} catch (error) {
+			this.lastStatus = { text: error instanceof Error ? error.message : t('agent.handoffFailed'), state: 'failed' };
+		} finally {
+			this.busy = false; this.preview = null;
+			if (this.context) this.render(this.context);
+		}
+	}
+
+	private renderHistory(document: Document): HTMLElement {
+		const section = element(document, 'section', 'academic-dashboard-agent-history');
+		section.append(
+			element(document, 'strong', 'academic-dashboard-agent-history__title', t('agent.historyTitle')),
+			element(document, 'p', 'academic-dashboard-agent__copy', t('agent.historyBoundary')),
+		);
+		const entries = [...this.services.getRequestLog()].reverse().slice(0, 5);
+		if (entries.length === 0) { section.append(element(document, 'p', 'academic-dashboard-agent__copy', t('agent.historyEmpty'))); return section; }
+		for (const entry of entries) {
+			const row = element(document, 'div', 'academic-dashboard-agent-history__item');
+			row.append(element(document, 'div', 'academic-dashboard-agent-history__meta', `${entry.timestamp} · ${getAgentWorkflow(entry.workflowId).title} · ${targetLabel(entry.target)}`));
+			row.append(element(document, 'div', 'academic-dashboard-agent-history__state', this.outcomeLabel(entry)));
+			if (entry.affectedPaths.length > 0) row.append(element(document, 'div', 'academic-dashboard-agent-history__paths', entry.affectedPaths.join(' · ')));
+			if (entry.contextCharacters !== undefined) row.append(element(document, 'div', 'academic-dashboard-agent-history__size', t('agent.historySize', { count: entry.contextCharacters })));
+			const actions = element(document, 'div', 'academic-dashboard-agent-history__actions');
+			const again = element(document, 'button', 'academic-dashboard-agent-history__action', t('agent.prepareAgain')); again.type = 'button';
+			again.addEventListener('click', () => { this.workflowId = entry.workflowId; this.input = ''; this.preview = null; this.lastStatus = { text: t('agent.reprepareHelp'), state: 'prepared-again' }; const settings = this.services.getAgentSettings(); this.services.setAgentSettings({ ...settings, selectedTarget: entry.target }); if (this.context) this.render(this.context); }, { signal: this.events?.signal }); actions.append(again);
+			if (!['handoff-failed', 'user-marked-complete'].includes(entry.outcome)) {
+				const complete = element(document, 'button', 'academic-dashboard-agent-history__action', t('agent.markComplete')); complete.type = 'button';
+				complete.addEventListener('click', () => { if (this.services.markRequestComplete(entry) && this.context) { this.lastStatus = { text: t('agent.state.userComplete'), state: 'user-marked-complete' }; this.render(this.context); } }, { signal: this.events?.signal }); actions.append(complete);
+			}
+			row.append(actions); section.append(row);
+		}
+		return section;
+	}
+
+	private outcomeLabel(entry: AgentWriteLogEntry): string {
+		if (entry.outcome === 'handoff-failed') return t('agent.state.failed');
+		if (entry.outcome === 'opened-without-prefill') return t('agent.state.openedOnly');
+		if (entry.outcome === 'user-marked-complete') return t('agent.state.userComplete');
+		return t('agent.state.waitingUserSend');
 	}
 }
 

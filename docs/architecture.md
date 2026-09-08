@@ -106,6 +106,15 @@ same records through the configured note-type field/value and exposes only
 mapped summary fields. Neither adapter reads note bodies, writes notes, or calls
 an external service.
 
+The academic material diagnostic uses a separate project-owned read port over the
+same file-list and parsed-frontmatter capabilities. It runs only from an
+explicit command, supports cancellation and progress reporting, skips
+hidden/generated paths, and returns aggregate course/paper mapping counts with
+at most eight Vault-relative issue samples. Draft roots and metadata mappings
+are validated through existing settings rules and can be compared without
+being persisted. It does not read note bodies, persist scan results, or expose
+a write method.
+
 Calendar and Today Tasks also have Native Vault baselines. Calendar identifies
 existing daily notes by an ISO `YYYY-MM-DD.md` basename and never creates a
 missing date note. The Native Markdown task adapter parses incomplete checkbox
@@ -113,14 +122,84 @@ items outside fenced code blocks; it includes tasks explicitly due today and
 undated tasks located in today's daily note. Individual unreadable files are
 skipped so a transient file race cannot fail the Widget.
 
+The Home task window scans Native Markdown once and assigns each incomplete
+task to exactly one of overdue, today, or the next seven local calendar days.
+Undated tasks count as today only when their source path exactly matches the
+configured Daily Note folder and filename format. A bounded list preserves the
+existing source fingerprint and exact source line, so completion uses the same
+review-first compare-and-swap path. The Widget schedules one refresh just after
+local midnight and cancels that timer when destroyed.
+
+Today Focus stores at most three bounded references in plugin settings: a
+short display label, Vault-relative Markdown path, and optional task line. A task can be pinned
+from its row; course and reading notes can be entered in Settings. Missing or
+completed targets remain visible as unavailable references instead of being
+silently removed. Focus settings never copy note bodies; pinning a task stores
+only its bounded display label and source reference.
+
+The Study Course Overview uses a project-owned read adapter over visible Vault
+files, parsed frontmatter, the Native task window, and the active review queue.
+Its identity key combines normalized course name and term, so the same course
+in two terms remains two records. Explicit mapped course/term metadata wins;
+otherwise, the first folder below the configured course root may supply the
+course only when known term evidence makes the association unambiguous. A
+configured current term is an exact filter and can disambiguate root resources.
+The adapter reports unresolved resources instead of guessing. The Widget opens
+existing files and refreshes on Vault changes; the contract exposes no move,
+metadata-write, completion, or percentage operation.
+
+The Research Reading Queue models papers and books as separate kinds. Native
+frontmatter supplies material identity and may provide the initial paper
+status; every user-managed queue status, order, next step, and position remains
+in validated plugin settings. Association tries the current path, then a unique
+mapped Reading ID, then a unique signature containing kind, normalized title,
+authors, year, and book edition. Ambiguous signatures stay untracked. Queue
+updates never invoke paper scalar writes or modify source files, and no
+percentage exists without an explicit total.
+
+Research paper queries normalize keywords, status, year, and up to ten exact
+tags independently from rendering. Up to 12 named views persist those bounded
+parameters in plugin settings and can be reapplied as pinned controls. The
+Widget requests at most 100 matching papers, paginates them in groups of ten,
+and marks a full 100-item result as potentially incomplete instead of calling
+it the Vault total. Related-material lookup uses a path index for the mapped
+explicit relation field and a tag index for exact shared tags; each relation
+carries its basis and detail, and title similarity is never used.
+
+Review Session consumes the same review adapter and adds only bounded in-memory
+session state. Course and term are optional fields on review results, derived
+from configured metadata for Native notes and accepted only as bounded strings
+from compatible optional adapters. A session contains 10 or 20 exact
+path-and-kind identities with independent pending, viewed, and skipped states.
+Only a Native item carrying the verified marker target can invoke the existing
+review-first date transform; external items remain read-only.
+
+The Home Weekly Review generator uses the local Monday-to-Sunday calendar
+window. It filters visible Markdown file modification times and the two
+validated retained logs by their recorded timestamps, limits each displayed
+source to 50 newest items, and emits traceable relative note links. The draft
+states that modification time is neither duration nor completion, that logs are
+retention-bound, and that reading progress and review-session state lack the
+historical timestamps needed to claim weekly activity. Users may edit the full
+Markdown before a second creation review. The final write uses the conservative
+exclusive-create contract at `Weekly Reviews/<week-start> Weekly Review.md`, so
+an existing or raced destination is never overwritten.
+
 The optional Tasks adapter owns Community Plugin detection and a future
 compatible query capability. No project-reviewed public read query is currently
 assumed from Tasks internals: missing or installed-but-unsupported versions
 declare `fallback` and delegate to the Native Markdown adapter. A compatible
 capability or runtime failure remains isolated inside that adapter.
 
+The grouped Home task window deliberately uses the Native adapter even when
+Tasks is installed because the reviewed optional capability exposes only a
+single-day query and cannot supply the exact source identity required for the
+seven-day view and safe completion.
+
 Settings schema version 3 introduced course-note and paper-reading template
-settings. Schema version 6 adds book-reading settings and migrates schema 5
+settings. Schema version 6 adds book-reading settings and migrates schema 5.
+Schema version 7 preserves schema 6 while adding Agent request evidence states
+and an optional bounded context-character count. These migrations do so
 without discarding existing template customizations, layouts, mappings, logs,
 GitHub settings/cache metadata, or locale. Each template may use editable
 Dashboard-owned Markdown or a selected Vault Markdown template, with a
@@ -210,12 +289,14 @@ completion. The user therefore verifies the target and explicitly sends. The UI
 reports only `ready for review` or `ready to send`, never an invented running or
 completed state.
 
-Read-only workflows are not logged as writes. For write-capable workflows, the
-Dashboard records only timestamp, workflow id, target, declared Vault-relative
-affected paths, handoff outcome, and a bounded error code. Prompt text, note
-content, API keys, provider/model/auth data, and absolute paths are not accepted
-by the log schema. These records describe Dashboard-to-Claudian handoff attempts;
-they are not evidence that Claudian or an Agent changed the filesystem.
+All workflow attempts use a bounded request-record store whose compatibility
+field remains named `agentWriteLog`. Dashboard records only timestamp, workflow
+id, target, declared Vault-relative affected paths, handoff evidence state,
+optional prepared-character count, and a bounded error code. Prompt text, user
+request text, note content, API keys, provider/model/auth data, and absolute
+paths are not accepted by the schema. These records describe
+Dashboard-to-Claudian handoff attempts; they are not evidence that Claudian or
+an Agent changed the filesystem.
 
 No component may silently make broad edits, delete notes, alter Vault structure, or modify `.obsidian`.
 
@@ -239,6 +320,17 @@ request a directory listing/Shell permission. After Send, these three prompts
 authorize exactly one new Markdown note (plus only the parent folder required
 by the resolved path) without a second plan/diff approval.
 Existing-note and multi-note writes remain `proposed-write` and review-first.
+
+The handoff Widget separates local preparation from Claudian prefill. Local
+preparation builds and validates the exact structured request, then shows its
+workflow, requested target, access boundary, related paths, resolved creation
+location, and character-count breakdown without calling the adapter. The user
+request remains editable; changing it invalidates the prepared object and
+disables its prefill action. Only the second action passes that exact reviewed
+request to Claudian. The five newest request records can restore a workflow and
+target, but never request text, and this action never sends automatically. A
+manual completion marker remains explicitly unverified because Claudian 2.1.3
+exposes neither a send event nor a completion/result event.
 
 ### Conservative local write contract
 

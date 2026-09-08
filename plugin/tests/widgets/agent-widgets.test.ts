@@ -105,12 +105,25 @@ function services(overrides: Partial<AgentWidgetServices> = {}): AgentWidgetServ
 		activeNotePath: () => 'Course/Week 1.md',
 		dailyNotePath: () => 'Daily Notes/2026-08-15.md',
 		academicMetadata: () => DEFAULT_METADATA_SETTINGS,
+		getRequestLog: () => [],
+		markRequestComplete: vi.fn(() => true),
+		openNote: vi.fn(async () => undefined),
 		creationContext: async (_workflowId, title) => ({
 			destination: 'Academic Notes',
 			resolvedPath: `Academic Notes/${title}/${title}.md`,
 		}),
 		...overrides,
 	};
+}
+
+function descendants(root: FakeElement): FakeElement[] {
+	return root.children.flatMap((child) => [child, ...descendants(child)]);
+}
+
+async function previewAndHandoff(target: ReturnType<typeof mounted>): Promise<void> {
+	target.content.children[0]?.children[3]?.click();
+	await vi.waitFor(() => expect(descendants(target.content).some(({ textContent }) => textContent === 'Open and prefill Claudian')).toBe(true));
+	descendants(target.content).find(({ textContent }) => textContent === 'Open and prefill Claudian')?.click();
 }
 
 describe('Agent Widgets', () => {
@@ -152,7 +165,7 @@ describe('Agent Widgets', () => {
 			targetSelect.value = 'opencode';
 			targetSelect.change();
 		}
-		form?.children[3]?.click();
+		await previewAndHandoff(target);
 
 		await vi.waitFor(() => expect(handoff).toHaveBeenCalledOnce());
 		expect(handoff).toHaveBeenCalledWith({
@@ -164,10 +177,7 @@ describe('Agent Widgets', () => {
 			expect.objectContaining({ target: 'opencode' }),
 			expect.objectContaining({ status: 'ready-for-review' }),
 		);
-		await vi.waitFor(() => {
-			expect(form?.children[4]?.textContent).toBe('Prepared in Claudian.');
-		});
-		expect(form?.children[3]?.focused).toBe(true);
+		await vi.waitFor(() => expect(descendants(target.content).some(({ textContent }) => textContent.includes('waiting for you to press Send'))).toBe(true));
 	});
 
 	it('opens Claudian through the adapter entry point', async () => {
@@ -195,7 +205,7 @@ describe('Agent Widgets', () => {
 			workflow.change();
 		}
 		form = target.content.children[0];
-		form?.children[3]?.click();
+		await previewAndHandoff(target);
 
 		await vi.waitFor(() => expect(handoff).toHaveBeenCalledOnce());
 		expect(handoff).toHaveBeenCalledWith({
@@ -252,7 +262,7 @@ describe('Agent Widgets', () => {
 			input.input();
 		}
 		expect(form?.children[2]?.textContent).toContain('no second approval');
-		form?.children[3]?.click();
+		await previewAndHandoff(target);
 
 		await vi.waitFor(() => expect(handoff).toHaveBeenCalledOnce());
 		expect(creationContext).toHaveBeenCalledWith(
@@ -267,6 +277,37 @@ describe('Agent Widgets', () => {
 			requestedDestination: 'Reading',
 			resolvedNotePath: 'Reading/DL_Recommender_System/Designing Data-Intensive Applications.md',
 		});
+	});
+
+	it('shows exact local context metadata before Claudian and invalidates it after edits', async () => {
+		const handoff = vi.fn(); const target = mounted();
+		new AgentWorkflowWidget(services({ claudian: adapter({ handoff }) })).mount(target.context);
+		target.content.children[0]?.children[3]?.click();
+		await vi.waitFor(() => expect(descendants(target.content).some(({ className }) => className === 'academic-dashboard-agent-preview')).toBe(true));
+		expect(handoff).not.toHaveBeenCalled();
+		const copy = descendants(target.content).map(({ textContent }) => textContent).join('\n');
+		expect(copy).toContain('Summarize current note · requested target: Codex');
+		expect(copy).toContain('Course/Week 1.md');
+		expect(copy).toMatch(/\d+ prepared characters/u);
+		const input = target.content.children[0]?.children[1]?.children[1];
+		if (input) { input.value = 'changed'; input.input(); }
+		expect(descendants(target.content).some(({ textContent }) => textContent.includes('requires a new preview'))).toBe(true);
+		expect(descendants(target.content).find(({ textContent }) => textContent === 'Open and prefill Claudian')?.disabled).toBe(true);
+	});
+
+	it('renders minimal history, restores a workflow without sending, and marks it unverified complete', () => {
+		const markRequestComplete = vi.fn(() => true); const handoff = vi.fn(); const target = mounted();
+		new AgentWorkflowWidget(services({
+			claudian: adapter({ handoff }), markRequestComplete,
+			getRequestLog: () => [{ timestamp: '2026-09-08T01:00:00.000Z', workflowId: 'repair-current-note-markdown', target: 'opencode', affectedPaths: ['Course/Week 1.md'], outcome: 'prefilled-awaiting-user-send', contextCharacters: 700 }],
+		})).mount(target.context);
+		const historyCopy = descendants(target.content).map(({ textContent }) => textContent).join('\n');
+		expect(historyCopy).toContain('700 prepared characters');
+		descendants(target.content).find(({ textContent }) => textContent === 'Prepare workflow again')?.click();
+		expect(handoff).not.toHaveBeenCalled();
+		expect(descendants(target.content).some(({ textContent }) => textContent.includes('Request text was not retained'))).toBe(true);
+		descendants(target.content).find(({ textContent }) => textContent === 'Mark complete')?.click();
+		expect(markRequestComplete).toHaveBeenCalledOnce();
 	});
 
 	it('stops before Claudian when native creation preflight fails', async () => {

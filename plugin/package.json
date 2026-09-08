@@ -1,6 +1,6 @@
 {
 	"name": "academic-dashboard",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"private": true,
 	"description": "Academic Dashboard plugin for Obsidian: a calm, widget-based academic workspace.",
 	"main": "main.js",

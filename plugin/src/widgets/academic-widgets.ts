@@ -7,6 +7,7 @@ import type { DataAdapter } from '../core/data-adapter';
 import type {
 	PaperStatusFilter,
 	ResearchPapersQuery,
+	SavedResearchView,
 } from '../core/research';
 import { PAPER_STATUSES, type PaperStatus } from '../core/metadata-settings';
 import type { WidgetRegistry } from '../core/widget-registry';
@@ -32,6 +33,8 @@ export interface AcademicWidgetServices {
 	) => Promise<PaperActionCommit>;
 	readonly undoPaperAction?: (token: string) => Promise<void>;
 	readonly getPaperUndos?: () => readonly PaperUndoState[];
+	readonly getSavedResearchViews?: () => readonly SavedResearchView[];
+	readonly setSavedResearchViews?: (views: readonly SavedResearchView[]) => boolean;
 }
 
 export interface PaperActionCommit {
@@ -199,6 +202,9 @@ export class RecentPapersWidget implements WidgetLifecycle {
 	private search = '';
 	private status: PaperStatusFilter = 'all';
 	private year: number | undefined;
+	private tags = '';
+	private page = 0;
+	private readonly pageSize = 10;
 	private readonly busyPaths = new Set<string>();
 
 	constructor(private readonly services: AcademicWidgetServices) {}
@@ -232,15 +238,16 @@ export class RecentPapersWidget implements WidgetLifecycle {
 				});
 				return;
 			}
-			this.renderFilters(context);
 			const items = await this.services.recentPapers.query({
-				limit: 50,
+				limit: 100,
 				status: this.status,
 				search: this.search,
+				tags: this.tags.split(/[,\s]+/u).filter(Boolean),
 				...(this.year === undefined ? {} : { year: this.year }),
 			});
 			if (generation !== this.generation) return;
 			const document = context.contentEl.ownerDocument;
+			this.renderFilters(context);
 			const undoStates = this.services.getPaperUndos?.() ?? [];
 			for (const undo of undoStates) {
 				context.contentEl.append(this.createPaperUndo(document, context, undo));
@@ -256,7 +263,12 @@ export class RecentPapersWidget implements WidgetLifecycle {
 				});
 				return;
 			}
-			this.renderPapers(context, items);
+			const pages = Math.max(1, Math.ceil(items.length / this.pageSize));
+			this.page = Math.min(this.page, pages - 1);
+			context.contentEl.append(element(document, 'div', 'academic-dashboard-research-count',
+				t('research.visibleCount', { start: this.page * this.pageSize + 1, end: Math.min(items.length, (this.page + 1) * this.pageSize), count: items.length, suffix: items.length === 100 ? '+' : '' })));
+			this.renderPapers(context, items.slice(this.page * this.pageSize, (this.page + 1) * this.pageSize));
+			if (pages > 1) this.renderPagination(context, pages);
 			context.setState({ status: 'ready' });
 		} catch {
 			if (generation !== this.generation) return;
@@ -298,12 +310,16 @@ export class RecentPapersWidget implements WidgetLifecycle {
 		year.placeholder = 'Year';
 		year.setAttribute('aria-label', t('filter.paperYearAria'));
 		year.value = this.year?.toString() ?? '';
+		const tags = element(document, 'input', 'academic-dashboard-filter');
+		tags.value = this.tags; tags.placeholder = t('research.tags'); tags.setAttribute('aria-label', t('research.tags'));
 		search.addEventListener('change', () => {
 			this.search = search.value.trim();
+			this.page = 0;
 			void this.load(context);
 		}, { signal: this.events?.signal });
 		status.addEventListener('change', () => {
 			this.status = status.value as PaperStatusFilter;
+			this.page = 0;
 			void this.load(context);
 		}, { signal: this.events?.signal });
 		year.addEventListener('change', () => {
@@ -311,9 +327,42 @@ export class RecentPapersWidget implements WidgetLifecycle {
 			this.year = Number.isInteger(parsed) && parsed >= 1000 && parsed <= 9999
 				? parsed
 				: undefined;
+			this.page = 0;
 			void this.load(context);
 		}, { signal: this.events?.signal });
-		controls.append(search, status, year);
+		tags.addEventListener('change', () => { this.tags = tags.value.trim(); this.page = 0; void this.load(context); }, { signal: this.events?.signal });
+		controls.append(search, status, year, tags);
+		context.contentEl.append(controls);
+		this.renderSavedViews(context);
+	}
+
+	private renderSavedViews(context: WidgetMountContext): void {
+		const document = context.contentEl.ownerDocument; const views = this.services.getSavedResearchViews?.() ?? [];
+		const bar = element(document, 'div', 'academic-dashboard-saved-research');
+		for (const view of views) {
+			const apply = element(document, 'button', 'academic-dashboard-saved-research__view', view.name); apply.type = 'button';
+			apply.setAttribute('aria-label', view.pinned ? t('research.applyPinnedView', { name: view.name }) : t('research.applyView', { name: view.name }));
+			apply.addEventListener('click', () => { this.applySavedView(view); void this.load(context); }, { signal: this.events?.signal }); bar.append(apply);
+			if (this.services.setSavedResearchViews) { const remove = element(document, 'button', 'academic-dashboard-saved-research__remove', '×'); remove.type = 'button'; remove.setAttribute('aria-label', t('research.removeView', { name: view.name })); remove.addEventListener('click', () => { if (this.services.setSavedResearchViews?.(views.filter(({ id }) => id !== view.id))) void this.load(context); }, { signal: this.events?.signal }); bar.append(remove); }
+		}
+		if (this.services.setSavedResearchViews) {
+			const name = element(document, 'input', 'academic-dashboard-filter'); name.placeholder = t('research.viewName');
+			const save = element(document, 'button', 'academic-dashboard-saved-research__view', t('research.saveView')); save.type = 'button';
+			save.addEventListener('click', () => {
+				const label = name.value.trim(); if (!label || views.length >= 12) return;
+				const baseId = `view-${Date.now().toString(36)}`; let id = baseId; let suffix = 1; while (views.some((view) => view.id === id)) id = `${baseId}-${suffix++}`;
+				const tags = this.tags.split(/[,\s]+/u).map((tag) => tag.replace(/^#/u, '').toLocaleLowerCase()).filter(Boolean).slice(0, 10);
+				if (this.services.setSavedResearchViews?.([...views, { id, name: label, search: this.search, status: this.status, tags, ...(this.year ? { year: this.year } : {}), pinned: true }])) void this.load(context);
+			}, { signal: this.events?.signal }); bar.append(name, save);
+		}
+		if (bar.children.length > 0) context.contentEl.append(bar);
+	}
+
+	private applySavedView(view: SavedResearchView): void { this.search = view.search; this.status = view.status; this.year = view.year; this.tags = view.tags.join(', '); this.page = 0; }
+
+	private renderPagination(context: WidgetMountContext, pages: number): void {
+		const document = context.contentEl.ownerDocument; const controls = element(document, 'div', 'academic-dashboard-research-pagination');
+		for (const [delta, label] of [[-1, t('research.previous')], [1, t('research.next')]] as const) { const button = element(document, 'button', 'academic-dashboard-saved-research__view', label); button.type = 'button'; button.disabled = delta < 0 ? this.page === 0 : this.page >= pages - 1; button.addEventListener('click', () => { this.page += delta; void this.load(context); }, { signal: this.events?.signal }); controls.append(button); }
 		context.contentEl.append(controls);
 	}
 
@@ -362,6 +411,11 @@ export class RecentPapersWidget implements WidgetLifecycle {
 				});
 			}, { signal: this.events?.signal });
 			row.append(button, this.renderPaperActions(document, item));
+			if (item.relations.length > 0) {
+				const related = element(document, 'div', 'academic-dashboard-paper-relations');
+				for (const relation of item.relations) { const link = element(document, 'button', 'academic-dashboard-paper-relation', relation.title); link.type = 'button'; link.title = relation.basis === 'explicit-link' ? t('research.explicitRelation', { detail: relation.detail }) : t('research.tagRelation', { detail: relation.detail }); link.addEventListener('click', () => { void this.services.openNote(relation.path); }, { signal: this.events?.signal }); related.append(link); }
+				row.append(related);
+			}
 			list.append(row);
 		}
 		context.contentEl.append(list);

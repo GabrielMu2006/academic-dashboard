@@ -4,10 +4,7 @@ import type {
 	LocalWidgetServices,
 	QuickLinkTarget,
 } from './local-widgets';
-
-interface FileExplorerView {
-	revealInFolder(file: TFile | TFolder): Promise<void>;
-}
+import { revealFolderInExplorer } from './quick-link-navigation';
 
 interface ObsidianCommandManager {
 	findCommand(commandId: string): unknown;
@@ -19,18 +16,10 @@ function commandManager(app: App): ObsidianCommandManager | null {
 	return candidate.commands ?? null;
 }
 
-function isFileExplorerView(value: unknown): value is FileExplorerView {
-	return (
-		typeof value === 'object' &&
-		value !== null &&
-		'revealInFolder' in value &&
-		typeof value.revealInFolder === 'function'
-	);
-}
-
 export function createObsidianLocalWidgetServices(
 	app: App,
 	getSettings: () => LocalWidgetSettings,
+	getCourseFolderRoot: () => string,
 ): LocalWidgetServices {
 	return {
 		now: () => new Date(),
@@ -39,6 +28,7 @@ export function createObsidianLocalWidgetServices(
 			clear: (handle) => window.clearInterval(handle),
 		},
 		getSettings,
+		getCourseFolderRoot,
 		resolveQuickLink: (path): QuickLinkTarget | null => {
 			const normalizedPath = normalizePath(path);
 			const file = app.vault.getAbstractFileByPath(normalizedPath);
@@ -50,6 +40,37 @@ export function createObsidianLocalWidgetServices(
 			}
 			return null;
 		},
+		listChildFolders: (path) => {
+			const root = app.vault.getAbstractFileByPath(normalizePath(path));
+			if (!(root instanceof TFolder)) return Object.freeze([]);
+			return Object.freeze(
+				root.children
+					.filter((child): child is TFolder => child instanceof TFolder)
+					.sort((left, right) =>
+						left.name.localeCompare(right.name, undefined, {
+							numeric: true,
+							sensitivity: 'base',
+						}),
+					)
+					.map((folder) => Object.freeze({ name: folder.name, path: folder.path })),
+			);
+		},
+		subscribeToFolderChanges: (callback) => {
+			const refs = [
+				app.vault.on('create', (file) => {
+					if (file instanceof TFolder) callback();
+				}),
+				app.vault.on('delete', (file) => {
+					if (file instanceof TFolder) callback();
+				}),
+				app.vault.on('rename', (file) => {
+					if (file instanceof TFolder) callback();
+				}),
+			];
+			return () => {
+				for (const ref of refs) app.vault.offref(ref);
+			};
+		},
 		openQuickLink: async (target) => {
 			const file = app.vault.getAbstractFileByPath(target.path);
 			if (target.kind === 'file' && file instanceof TFile) {
@@ -57,9 +78,18 @@ export function createObsidianLocalWidgetServices(
 				return;
 			}
 			if (target.kind === 'folder' && file instanceof TFolder) {
-				const explorer = app.workspace.getLeavesOfType('file-explorer')[0]?.view;
-				if (isFileExplorerView(explorer)) {
-					await explorer.revealInFolder(file);
+				const explorerLeaf = app.workspace.getLeavesOfType('file-explorer')[0];
+				if (!explorerLeaf) {
+					throw new Error('The file explorer is unavailable.');
+				}
+				if (
+					await revealFolderInExplorer(
+						explorerLeaf,
+						(leaf) => app.workspace.revealLeaf(leaf),
+						file,
+						target.path,
+					)
+				) {
 					return;
 				}
 			}

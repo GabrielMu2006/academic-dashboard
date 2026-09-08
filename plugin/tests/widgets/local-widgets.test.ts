@@ -3,6 +3,7 @@ import { DEFAULT_LOCAL_WIDGET_SETTINGS } from '../../src/core/local-widget-setti
 import type { WidgetMountContext, WidgetState } from '../../src/core/widgets';
 import {
 	CommandLauncherWidget,
+	CourseFoldersWidget,
 	createLocalWidgetRegistry,
 	DateTimeWidget,
 	LocalQuoteWidget,
@@ -39,6 +40,10 @@ class FakeElement {
 	toggleAttribute(name: string, enabled: boolean): void {
 		if (enabled) this.attributes.set(name, '');
 		else this.attributes.delete(name);
+	}
+
+	setAttribute(name: string, value: string): void {
+		this.attributes.set(name, value);
 	}
 
 	addEventListener(
@@ -101,7 +106,10 @@ function services(
 		now: () => new Date('2026-08-11T08:30:00Z'),
 		scheduler: { set: vi.fn(() => 7), clear: vi.fn() },
 		getSettings: () => DEFAULT_LOCAL_WIDGET_SETTINGS,
+		getCourseFolderRoot: () => 'Course',
 		resolveQuickLink: () => null,
+		listChildFolders: () => Object.freeze([]),
+		subscribeToFolderChanges: () => () => undefined,
 		openQuickLink: vi.fn(async () => undefined),
 		hasCommand: () => true,
 		executeCommand: vi.fn(async () => undefined),
@@ -182,6 +190,53 @@ describe('local Widgets', () => {
 		expect(open).not.toHaveBeenCalled();
 	});
 
+	it('renders one Study button per course folder and refreshes on folder changes', () => {
+		const open = vi.fn(async () => undefined);
+		const unsubscribe = vi.fn();
+		let notify: () => void = () => undefined;
+		let folders = [{ name: 'ICS', path: 'Course/ICS' }];
+		const mounted = context();
+		const widget = new CourseFoldersWidget(
+			services({
+				resolveQuickLink: (path) => ({ kind: 'folder', path }),
+				listChildFolders: () => folders,
+				subscribeToFolderChanges: (callback) => {
+					notify = callback;
+					return unsubscribe;
+				},
+				openQuickLink: open,
+			}),
+		);
+
+		widget.mount(mounted.value);
+		expect(mounted.content.children[0]?.textContent).toContain('1');
+		mounted.content.children[1]?.children[0]?.click();
+		expect(open).toHaveBeenCalledWith({ kind: 'folder', path: 'Course/ICS' });
+
+		folders = [
+			{ name: 'ICS', path: 'Course/ICS' },
+			{ name: 'VCL', path: 'Course/VCL' },
+		];
+		notify();
+		expect(mounted.content.children[1]?.children).toHaveLength(2);
+
+		widget.destroy();
+		expect(unsubscribe).toHaveBeenCalledOnce();
+	});
+
+	it('shows an empty Study state when the course root has no child folders', () => {
+		const mounted = context();
+		new CourseFoldersWidget(
+			services({
+				resolveQuickLink: (path) => ({ kind: 'folder', path }),
+			}),
+		).mount(mounted.value);
+
+		expect(mounted.states.at(-1)).toEqual(
+			expect.objectContaining({ status: 'empty' }),
+		);
+	});
+
 	it('renders bundled local quotes when the quote file is disabled and reports empty configuration', () => {
 		const ready = context();
 		new LocalQuoteWidget(services({
@@ -257,13 +312,14 @@ describe('local Widgets', () => {
 		expect(buttons[1]?.disabled).toBe(true);
 	});
 
-	it('registers the four built-in local Widgets with stable IDs', () => {
+	it('registers the built-in local Widgets with stable IDs', () => {
 		const registry = createLocalWidgetRegistry(services());
 		expect(registry.definitions().map(({ id }) => id)).toEqual([
 			'home.date-time',
 			'home.shortcuts',
 			'home.commands',
 			'home.quote',
+			'study.course-folders',
 		]);
 	});
 });

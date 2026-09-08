@@ -57,7 +57,7 @@ import {
 	type ValidationResult,
 } from './validation';
 
-export const SETTINGS_SCHEMA_VERSION = 6;
+export const SETTINGS_SCHEMA_VERSION = 7;
 
 export interface DashboardSettings {
 	readonly schemaVersion: typeof SETTINGS_SCHEMA_VERSION;
@@ -293,6 +293,9 @@ export function migrateDashboardSettings(
 	input: unknown,
 	knownWidgetIds?: ReadonlySet<string>,
 ): ValidationResult<DashboardSettings> {
+	if (isRecord(input) && input.schemaVersion === 6) {
+		return validateDashboardSettings({ ...input, schemaVersion: SETTINGS_SCHEMA_VERSION }, knownWidgetIds);
+	}
 	if (
 		!isRecord(input) ||
 		(input.schemaVersion !== 0 &&
@@ -306,7 +309,7 @@ export function migrateDashboardSettings(
 			validationIssue(
 				'unsupported_settings_migration',
 				'settings.schemaVersion',
-				`Only settings schema versions 0 through 5 can migrate to version ${SETTINGS_SCHEMA_VERSION}.`,
+				`Only settings schema versions 0 through 6 can migrate to version ${SETTINGS_SCHEMA_VERSION}.`,
 			),
 		]);
 	}
@@ -478,7 +481,8 @@ export function restoreDashboardSettings(
 			input.schemaVersion === 2 ||
 			input.schemaVersion === 3 ||
 			input.schemaVersion === 4 ||
-			input.schemaVersion === 5)
+			input.schemaVersion === 5 ||
+			input.schemaVersion === 6)
 	) {
 		const migrated = migrateDashboardSettings(input, options.knownWidgetIds);
 		return migrated.ok

@@ -11,6 +11,8 @@ import type {
 	ReviewVaultPort,
 	SpacedRepetitionPluginPort,
 } from './review-queue-adapters';
+import type { AcademicMaterialDiagnosticVaultPort } from '../core/academic-material-diagnostic';
+import type { CourseOverviewVaultPort } from './native-course-overview-adapter';
 
 interface CommunityPluginRegistry {
 	getPlugin(pluginId: string): unknown;
@@ -33,6 +35,31 @@ export function createObsidianVaultPort(app: App): NativeVaultPort {
 			const file = app.vault.getAbstractFileByPath(path);
 			if (!(file instanceof TFile)) return null;
 			return app.metadataCache.getFileCache(file)?.frontmatter ?? null;
+		},
+	};
+}
+
+export function createObsidianAcademicMaterialDiagnosticPort(
+	app: App,
+): AcademicMaterialDiagnosticVaultPort {
+	const native = createObsidianVaultPort(app);
+	return {
+		listMarkdownFiles: () => native.listMarkdownFiles(),
+		frontmatter: (path) => native.frontmatter(path),
+	};
+}
+
+export function createObsidianCourseOverviewPort(app: App): CourseOverviewVaultPort {
+	return {
+		listFiles: () => app.vault.getFiles().map((file) => ({
+			path: file.path,
+			extension: file.extension,
+		})),
+		frontmatter: (path) => {
+			const file = app.vault.getAbstractFileByPath(path);
+			return file instanceof TFile
+				? app.metadataCache.getFileCache(file)?.frontmatter ?? null
+				: null;
 		},
 	};
 }
@@ -100,5 +127,11 @@ export async function openObsidianVaultNote(app: App, path: string): Promise<voi
 	if (!(file instanceof TFile) || file.extension !== 'md') {
 		throw new Error('The selected Markdown note is no longer available.');
 	}
+	await app.workspace.getLeaf(false).openFile(file);
+}
+
+export async function openObsidianVaultFile(app: App, path: string): Promise<void> {
+	const file = app.vault.getAbstractFileByPath(path);
+	if (!(file instanceof TFile)) throw new Error('The selected Vault file is unavailable.');
 	await app.workspace.getLeaf(false).openFile(file);
 }

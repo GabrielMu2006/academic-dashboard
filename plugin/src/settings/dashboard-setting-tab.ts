@@ -18,6 +18,7 @@ import {
 import type {
 	LocalWidgetSettings,
 	QuickLinkSetting,
+	TodayFocusSetting,
 } from '../core/local-widget-settings';
 import type { LocalWriteSettings } from '../core/local-write-settings';
 import {
@@ -33,7 +34,7 @@ import {
 	type TemplateSourceKind,
 } from '../core/template-settings';
 import type { WidgetDefinition } from '../core/widgets';
-import { parseQuickLinks, parseQuotes } from './setting-formats';
+import { parseQuickLinks, parseQuotes, parseTodayFocus } from './setting-formats';
 import {
 	formatDate,
 	formatNumber,
@@ -69,6 +70,11 @@ function serializeQuickLinks(links: readonly QuickLinkSetting[]): string {
 	return links.map(({ label, path }) => `${label} | ${path}`).join('\n');
 }
 
+function serializeTodayFocus(items: readonly TodayFocusSetting[]): string {
+	return items.map(({ label, path, line }) =>
+		`${label} | ${path}${line ? ` | ${line}` : ''}`).join('\n');
+}
+
 export class DashboardSettingTab extends PluginSettingTab {
 	constructor(
 		app: App,
@@ -100,6 +106,8 @@ export class DashboardSettingTab extends PluginSettingTab {
 		this.renderPaperWrites();
 		this.renderTemplates();
 		this.renderQuickLinks();
+		this.renderTodayFocus();
+		this.renderCurrentTerm();
 		this.renderQuotes();
 		this.renderLayoutReset();
 		this.renderAgentBoundary();
@@ -294,6 +302,9 @@ export class DashboardSettingTab extends PluginSettingTab {
 			{ id: 'status', name: 'Reading status field', description: 'Unread, reading, or reviewed.' },
 			{ id: 'venue', name: 'Venue field', description: 'Journal, conference, or venue.' },
 			{ id: 'doi', name: 'DOI field', description: 'Digital object identifier.' },
+			{ id: 'edition', name: 'Edition field', description: 'Book edition or version.' },
+			{ id: 'readingId', name: 'Reading ID field', description: 'Optional stable identity used to reconnect reading records after a rename.' },
+			{ id: 'related', name: 'Related material field', description: 'Explicit Vault links used for explainable research relationships.' },
 			{ id: 'tags', name: 'Tags field', description: 'Vault tags for the note.' },
 		];
 		for (const field of fields) {
@@ -323,6 +334,12 @@ export class DashboardSettingTab extends PluginSettingTab {
 					valueDraft.paperType = value;
 				}),
 			);
+		new Setting(this.containerEl)
+			.setName('Book type value')
+			.setDesc('Recommended default: book-note')
+			.addText((text) => text.setValue(valueDraft.bookType ?? 'book-note').onChange((value) => {
+				valueDraft.bookType = value;
+			}));
 
 		new Setting(this.containerEl)
 			.setName('Metadata mapping')
@@ -467,6 +484,47 @@ export class DashboardSettingTab extends PluginSettingTab {
 			);
 	}
 
+	private renderTodayFocus(): void {
+		new Setting(this.containerEl).setName('Today focus').setHeading();
+		let draft = serializeTodayFocus(this.controller.getSettings().widgets.todayFocus);
+		new Setting(this.containerEl)
+			.setName('Pinned references')
+			.setDesc('Up to three lines: Label | relative/vault/path | optional task line')
+			.addTextArea((text) => {
+				text.setValue(draft).onChange((value) => { draft = value; });
+				text.inputEl.rows = 3;
+			})
+			.addButton((button) => button.setButtonText('Save').onClick(() => {
+				const parsed = parseTodayFocus(draft);
+				if (parsed.invalidLines.length > 0 || parsed.links.length > 3) {
+					new Notice('Today focus not saved. Use at most three valid references.');
+					return;
+				}
+				const current = this.controller.getSettings().widgets;
+				if (this.controller.setLocalWidgetSettings({ ...current, todayFocus: parsed.links })) {
+					this.controller.refreshDashboardViews();
+					new Notice('Today focus saved.');
+				} else {
+					new Notice('Today focus references were invalid and were not saved.');
+				}
+			}));
+	}
+
+	private renderCurrentTerm(): void {
+		let draft = this.controller.getSettings().widgets.currentTerm;
+		new Setting(this.containerEl)
+			.setName('Current term')
+			.setDesc('Optional exact term used by course overview to separate courses with the same name.')
+			.addText((text) => text.setValue(draft).setPlaceholder('2026 Fall').onChange((value) => { draft = value; }))
+			.addButton((button) => button.setButtonText('Save').onClick(() => {
+				const current = this.controller.getSettings().widgets;
+				if (this.controller.setLocalWidgetSettings({ ...current, currentTerm: draft })) {
+					this.controller.refreshDashboardViews();
+					new Notice('Current term saved.');
+				} else new Notice('Current term must be at most 120 characters.');
+			}));
+	}
+
 	private renderQuotes(): void {
 		new Setting(this.containerEl).setName('Local quotes').setHeading();
 		let pathDraft = this.controller.getSettings().widgets.quoteFilePath;
@@ -587,8 +645,8 @@ export class DashboardSettingTab extends PluginSettingTab {
 					}),
 			);
 		new Setting(this.containerEl)
-			.setName('Agent write-log retention')
-			.setDesc('Days to retain minimal write-handoff metadata. Default: 30.')
+			.setName('Agent request-record retention')
+			.setDesc('Days to retain minimal agent request metadata. Default: 30.')
 			.addText((text) => {
 				text.inputEl.type = 'number';
 				text.inputEl.min = '1';
@@ -605,7 +663,7 @@ export class DashboardSettingTab extends PluginSettingTab {
 				});
 			});
 		new Setting(this.containerEl)
-			.setName('Recorded write handoffs')
+			.setName('Recorded agent requests')
 			.setDesc(t('settings.retainedLogs', {
 				count: formatNumber(this.controller.getSettings().agentWriteLog.length),
 			}));

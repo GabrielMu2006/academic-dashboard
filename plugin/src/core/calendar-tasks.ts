@@ -21,11 +21,34 @@ export interface TodayTasksQuery {
 	readonly limit: number;
 }
 
+export interface TaskWindowQuery {
+	readonly date: string;
+	readonly futureDays: number;
+	readonly limit: number;
+	readonly dailyNotePath: string;
+}
+
+export interface TaskWindow {
+	readonly overdue: readonly TodayTaskItem[];
+	readonly today: readonly TodayTaskItem[];
+	readonly upcoming: readonly TodayTaskItem[];
+}
+
+export function addIsoDays(date: string, days: number): string | null {
+	if (!isIsoDate(date) || !Number.isInteger(days) || Math.abs(days) > 3660) return null;
+	const [year = 0, month = 0, day = 0] = date.split('-').map(Number);
+	const value = new Date(Date.UTC(year, month - 1, day + days));
+	return toIsoDate(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+}
+
 export interface TodayTaskItem {
 	readonly path: string;
 	readonly line: number;
 	readonly text: string;
 	readonly dueDate?: string;
+	/** Native-only source identity used before preparing an exact write. */
+	readonly sourceFingerprint?: string;
+	readonly sourceLine?: string;
 }
 
 export const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

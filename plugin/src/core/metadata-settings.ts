@@ -18,6 +18,9 @@ export const METADATA_FIELD_IDS = [
 	'status',
 	'venue',
 	'doi',
+	'edition',
+	'readingId',
+	'related',
 	'tags',
 ] as const;
 
@@ -34,12 +37,16 @@ export interface MetadataFieldMapping {
 	readonly status: string;
 	readonly venue: string;
 	readonly doi: string;
+	readonly edition: string;
+	readonly readingId: string;
+	readonly related: string;
 	readonly tags: string;
 }
 
 export interface MetadataValueMapping {
 	readonly courseNoteType: string;
 	readonly paperType: string;
+	readonly bookType?: string;
 }
 
 export interface MetadataSettings {
@@ -69,6 +76,15 @@ export const RECOMMENDED_PAPER_NOTE_SCHEMA = Object.freeze({
 	tags: Object.freeze([] as string[]),
 });
 
+export const RECOMMENDED_BOOK_NOTE_SCHEMA = Object.freeze({
+	type: 'book-note',
+	title: '',
+	authors: Object.freeze([] as string[]),
+	year: null,
+	edition: '',
+	'reading-id': '',
+});
+
 function freezeMetadataSettings(
 	fields: MetadataFieldMapping,
 	values: MetadataValueMapping,
@@ -91,9 +107,12 @@ export const DEFAULT_METADATA_SETTINGS: MetadataSettings = freezeMetadataSetting
 		status: 'status',
 		venue: 'venue',
 		doi: 'doi',
+		edition: 'edition',
+		readingId: 'reading-id',
+		related: 'related',
 		tags: 'tags',
 	},
-	{ courseNoteType: 'course-note', paperType: 'paper' },
+	{ courseNoteType: 'course-note', paperType: 'paper', bookType: 'book-note' },
 );
 
 const MAX_MAPPING_TEXT_LENGTH = 120;
@@ -162,7 +181,7 @@ export function validateMetadataSettings(
 	const seenFields = new Map<string, MetadataFieldId>();
 	for (const fieldId of METADATA_FIELD_IDS) {
 		const field = readMappingText(
-			input.fields[fieldId],
+			input.fields[fieldId] ?? DEFAULT_METADATA_SETTINGS.fields[fieldId],
 			`settings.metadata.fields.${fieldId}`,
 			'field',
 			issues,
@@ -195,12 +214,18 @@ export function validateMetadataSettings(
 		'value',
 		issues,
 	);
-	if (courseNoteType && paperType && courseNoteType === paperType) {
+	const bookType = readMappingText(
+		input.values.bookType ?? DEFAULT_METADATA_SETTINGS.values.bookType,
+		'settings.metadata.values.bookType',
+		'value',
+		issues,
+	);
+	if (courseNoteType && paperType && bookType && new Set([courseNoteType, paperType, bookType]).size !== 3) {
 		issues.push(
 			validationIssue(
 				'duplicate_metadata_type_value',
 				'settings.metadata.values.paperType',
-				'Course-note and paper type values must be different.',
+				'Course-note, paper, and book type values must be different.',
 			),
 		);
 	}
@@ -208,7 +233,8 @@ export function validateMetadataSettings(
 	if (
 		issues.length > 0 ||
 		!courseNoteType ||
-		!paperType
+		!paperType ||
+		!bookType
 	) {
 		return validationFailure(issues);
 	}
@@ -216,7 +242,7 @@ export function validateMetadataSettings(
 	return validationSuccess(
 		freezeMetadataSettings(
 			fields,
-			{ courseNoteType, paperType },
+			{ courseNoteType, paperType, bookType },
 		),
 	);
 }

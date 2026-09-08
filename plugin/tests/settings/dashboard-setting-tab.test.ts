@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { parseQuickLinks } from '../../src/settings/setting-formats';
+import { parseQuickLinks, parseTodayFocus } from '../../src/settings/setting-formats';
 
 describe('Dashboard setting formats', () => {
+	it('parses note and exact-line Today Focus references', () => {
+		const parsed = parseTodayFocus('Course | Course/Math.md\nExam | Daily/Today.md | 7');
+		expect(parsed.invalidLines).toEqual([]);
+		expect(parsed.links).toEqual([
+			{ label: 'Course', path: 'Course/Math.md' },
+			{ label: 'Exam', path: 'Daily/Today.md', line: 7 },
+		]);
+	});
 	it('parses labelled Vault-relative quick links', () => {
 		const parsed = parseQuickLinks(
 			'Course | Course\nPaper | Reading/Papers/example.md\n',

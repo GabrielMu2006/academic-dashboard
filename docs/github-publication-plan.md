@@ -1,5 +1,10 @@
 # GitHub publication plan
 
+> Historical plan: the initial 0.2.0 publication described below is complete.
+> Current development and releases use this public repository on `main` as the
+> canonical source. The sibling `dashboard/` directory is a local archive and
+> must not be used to build or publish releases.
+
 This plan publishes Academic Dashboard as an independent public repository,
 creates an installable GitHub release, and leaves Community Plugins submission
 as a later explicit step.

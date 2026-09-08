@@ -5,7 +5,7 @@ plain Vault. Claudian, Tasks, Spaced Repetition, and Bases are optional; missing
 or incompatible integrations show an explicit fallback instead of blocking the
 Dashboard.
 
-Academic Dashboard 0.2.0 requires Obsidian 1.11.4 or newer because GitHub
+Academic Dashboard 0.3.0 requires Obsidian 1.11.4 or newer because GitHub
 credentials use the public SecretStorage API. The acceptance target remains
 Obsidian Desktop 1.13.6.
 
@@ -72,6 +72,40 @@ The settings page retains the original local quote list as a compatibility
 fallback. It is used only when the quote-file path is empty. A missing or empty
 configured file is reported explicitly instead of silently switching sources.
 
+## Today task window and focus
+
+The Home task Widget groups incomplete Native Markdown tasks into **Overdue**,
+**Today**, and **Next 7 days**. A task appears in only one group. Undated tasks
+are included in Today only when they are inside the exact Daily Note path built
+from **Daily Note folder** and **Filename format** in Settings. The Widget
+refreshes just after local midnight and keeps the existing review-first task
+completion and conditional Undo behavior.
+
+Choose the star on a task to add or remove it from Today Focus. To focus a
+course or reading note, use **Settings → Academic Dashboard → Today focus** and
+enter up to three lines as `Label | relative/path.md`; a task reference may add
+its exact line as a third value. Missing notes and completed or moved task lines
+remain visible as unavailable references so they can be corrected rather than
+silently discarded.
+
+## Course overview
+
+The Study **Course Overview** groups material by the mapped course and term
+fields. Set **Current term** in Dashboard settings to an exact term value such
+as `2026 Fall` when the same course name appears in several terms. Notes with
+explicit mapped metadata take priority. Visible files directly below the
+configured course root are associated through their first child folder only
+when that association is unambiguous; shared-root resources stay unresolved
+when several terms could own them.
+
+The selected course shows mapped course notes, related files, tasks due through
+the next seven days, and currently due reviews. The basis label explains the
+association used. File create, delete, rename, and modify events refresh the
+view. Opening an item only opens its existing Vault file: Course Overview never
+moves material, edits metadata, marks a course complete, or invents a
+completion percentage. Use **Academic Dashboard: Diagnose academic materials**
+when a course or resource is missing.
+
 ## Academic note creation
 
 The course, paper-reading, and book-reading templates default to `Course`,
@@ -92,7 +126,61 @@ passes one resolved path to Claudian. Claudian does not need Shell access or a
 user-supplied file list. It creates that one note without a second approval once
 the user has pressed Send.
 
+Before changing academic mappings, run **Academic Dashboard: Diagnose academic
+materials** from the command palette. The manual diagnostic is read-only: it
+lists Markdown paths, reads parsed frontmatter, and previews the active course
+and paper roots plus field/value mappings. Edit the draft rules in the modal to
+compare recognition counts before saving the same choices in Settings; the
+draft itself is never persisted. The result shows scan progress, bounded counts,
+and at most eight issue paths. It distinguishes matched course and paper notes,
+course markers whose type does not match, invalid paper status, unclassified
+notes in each configured root, metadata read errors, and excluded hidden or
+generated paths. It never reads note bodies or changes files. Close the modal or
+choose **Cancel** to stop a running scan.
+
+For reading-queue identity, the metadata settings also expose **Book type**,
+**Edition**, and **Reading ID** mappings. Existing `book-note` notes remain
+compatible. A unique Reading ID is the strongest way to reconnect plugin-side
+reading records after a note rename; edition prevents different versions from
+being treated as the same book merely because their titles match.
+
+The Research **Reading Queue** separates papers and books and can filter the
+visible list by queue status. Each row opens the source note and stores its
+manual order, next step, and page/chapter or paper-stage position in Dashboard
+plugin settings. Paper frontmatter status and compatible book status provide
+an initial display only; saving queue progress does not write either source
+field. No percentage is shown because the queue does not assume a total page
+count.
+
+## Review sessions
+
+The Study **Review Session** reads the same due items as Review Queue. Choose a
+course, notes or flashcards, and a limit of 10 or 20 before starting. Within the
+session, opening the source, marking an item viewed, and skipping are separate
+actions. **Viewed this session** records only the current in-memory interaction;
+it does not claim recall, mastery, or completion. Ending the session clears that
+temporary state and does not affect other Dashboard pages.
+
+An exact Native Markdown review marker also offers the existing review-first
+next-date choices and conditional Undo through Review Queue. Optional-plugin
+items without a verified write target remain open/view/skip only. If a note was
+renamed or its marker changed, the safe write path rejects the stale target
+rather than updating a similarly named item.
+
 ## Research paper actions
+
+Research filters include keywords, status, year, and exact tags. Enter a short
+name and choose **Save pinned view** to persist the current structured query in
+Dashboard settings; selecting that view restores the same values after a
+refresh. Up to 12 views are accepted, and invalid stored queries fall back
+through normal settings validation rather than being executed.
+
+Results are shown 10 at a time. The count states the visible range and uses a
+`+` suffix when the bounded 100-item read may not represent the entire Vault.
+Related-material buttons are generated only from the mapped **Related material
+field** or an exact shared tag. Their tooltip states which basis was used.
+Title similarity and directory proximity are not treated as confirmed
+relationships.
 
 In **Settings → Academic Dashboard → Academic metadata**, map the reading status
 field used by the paper list. In **Research paper actions**, map the status write

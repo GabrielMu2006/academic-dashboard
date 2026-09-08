@@ -303,6 +303,22 @@ describe('Dashboard settings migration and recovery', () => {
 		}
 	});
 
+	it('migrates version 6 without losing request history or Widget preferences', () => {
+		const input = {
+			...validSettings(),
+			schemaVersion: 6,
+			widgets: { ...DEFAULT_DASHBOARD_SETTINGS.widgets, currentTerm: '2026 Fall' },
+			agentWriteLog: [{
+				timestamp: '2026-08-12T00:00:00.000Z', workflowId: 'repair-current-note-markdown', target: 'opencode', affectedPaths: ['Course/Week 1.md'], outcome: 'prepared-for-review',
+			}],
+		};
+		const restored = restoreDashboardSettings(input);
+		expect(restored.source).toBe('migrated');
+		expect(restored.value.schemaVersion).toBe(SETTINGS_SCHEMA_VERSION);
+		expect(restored.value.widgets.currentTerm).toBe('2026 Fall');
+		expect(restored.value.agentWriteLog).toEqual(input.agentWriteLog);
+	});
+
 	it('falls back safely for unsupported future settings', () => {
 		const restored = restoreDashboardSettings({
 			schemaVersion: 99,

@@ -1,4 +1,9 @@
 import type { MetadataSettings } from '../core/metadata-settings';
+import { fingerprintContent } from '../core/conservative-writes';
+import {
+	scanMarkdownLines,
+	type ScannedMarkdownLine,
+} from '../core/markdown-structure';
 import {
 	adapterAvailable,
 	adapterFallback,
@@ -26,21 +31,8 @@ export interface SpacedRepetitionPluginPort {
 	queryDueItems?: (query: ReviewQueueQuery) => Promise<readonly ReviewQueueItem[]>;
 }
 
-function stripFencedCode(markdown: string): string {
-	const output: string[] = [];
-	let fence: '`' | '~' | null = null;
-	for (const line of markdown.split(/\r?\n/)) {
-		const match = /^\s*(`{3,}|~{3,})/.exec(line);
-		if (match) {
-			const marker = match[1]?.[0];
-			if (!fence) fence = marker === '~' ? '~' : '`';
-			else if (marker === fence) fence = null;
-			output.push('');
-			continue;
-		}
-		output.push(fence ? '' : line);
-	}
-	return output.join('\n');
+function stripCode(lines: readonly ScannedMarkdownLine[]): string {
+	return lines.map((line) => line.inCode ? '' : line.text).join('\n');
 }
 
 function normalizedTags(value: unknown): readonly string[] {
@@ -129,7 +121,8 @@ export class NativeReviewQueueAdapter
 
 	async query(input: ReviewQueueQuery): Promise<readonly ReviewQueueItem[]> {
 		const query = normalizeReviewQueueQuery(input);
-		const tagField = this.getMetadataSettings().fields.tags;
+		const metadata = this.getMetadataSettings();
+		const tagField = metadata.fields.tags;
 		const items: ReviewQueueItem[] = [];
 		const files = [...this.vault.listMarkdownFiles()]
 			.filter((file) => isNativeVaultNotePath(file.path))
@@ -138,8 +131,13 @@ export class NativeReviewQueueAdapter
 		for (const file of files) {
 			if (!matchesSearch(file, query.search)) continue;
 			let markdown: string;
+			let sourceFingerprint: string;
+			let sourceLines: readonly ScannedMarkdownLine[];
 			try {
-				markdown = stripFencedCode(await this.vault.readMarkdown(file.path));
+				const source = await this.vault.readMarkdown(file.path);
+				sourceFingerprint = fingerprintContent(source);
+				sourceLines = scanMarkdownLines(source);
+				markdown = stripCode(sourceLines);
 			} catch {
 				continue;
 			}
@@ -149,20 +147,35 @@ export class NativeReviewQueueAdapter
 			} catch {
 				continue;
 			}
+			const courseValue = frontmatter?.[metadata.fields.course];
+			const termValue = frontmatter?.[metadata.fields.term];
+			const course = typeof courseValue === 'string' ? courseValue.trim() : '';
+			const term = typeof termValue === 'string' ? termValue.trim() : '';
+			if (query.course && course.toLocaleLowerCase() !== query.course) continue;
 			const markers = scheduleMarkers(markdown);
 			const dates = markers.map(({ date }) => date);
 			if (query.kind !== 'flashcard' && hasTag(markdown, frontmatter, tagField, 'review')) {
 				const summary = dueSummary(1, dates.slice(0, 1), query.date);
-				if (summary.dueCount > 0) {
-					const marker = markers.length === 1 ? markers[0] : undefined;
-					items.push(Object.freeze({
+					if (summary.dueCount > 0) {
+						const marker = markers.length === 1 ? markers[0] : undefined;
+						const sourceLine = marker
+							? sourceLines[marker.line - 1]?.text
+							: undefined;
+						items.push(Object.freeze({
 						path: file.path,
 						title: file.basename,
 						kind: 'note',
 						totalCount: 1,
+						...(course ? { course } : {}),
+						...(term ? { term } : {}),
 						...summary,
-						...(marker
-							? { reviewTarget: Object.freeze({ line: marker.line, currentDate: marker.date }) }
+							...(marker && sourceLine !== undefined
+								? { reviewTarget: Object.freeze({
+									line: marker.line,
+									currentDate: marker.date,
+									sourceFingerprint,
+									sourceLine,
+								}) }
 							: {}),
 					}));
 				}
@@ -176,6 +189,8 @@ export class NativeReviewQueueAdapter
 						title: file.basename,
 						kind: 'flashcard',
 						totalCount,
+						...(course ? { course } : {}),
+						...(term ? { term } : {}),
 						...summary,
 					}));
 				}
@@ -247,7 +262,9 @@ function normalizePluginReviewItems(
 			typeof item.totalCount !== 'number' ||
 			!Number.isInteger(item.totalCount) ||
 			item.totalCount < item.dueCount ||
-			(item.nextDue !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(item.nextDue))
+			(item.nextDue !== undefined && !/^\d{4}-\d{2}-\d{2}$/u.test(item.nextDue)) ||
+			(item.course !== undefined && (typeof item.course !== 'string' || !item.course.trim() || item.course.trim().length > 120)) ||
+			(item.term !== undefined && (typeof item.term !== 'string' || !item.term.trim() || item.term.trim().length > 120))
 		) {
 			return null;
 		}
@@ -258,6 +275,7 @@ function normalizePluginReviewItems(
 		) {
 			continue;
 		}
+		if (query.course && item.course?.trim().toLocaleLowerCase() !== query.course) continue;
 		items.push(Object.freeze({
 			path: item.path,
 			title: item.title.trim(),
@@ -265,6 +283,8 @@ function normalizePluginReviewItems(
 			dueCount: item.dueCount,
 			totalCount: item.totalCount,
 			...(item.nextDue ? { nextDue: item.nextDue } : {}),
+			...(typeof item.course === 'string' && item.course.trim() ? { course: item.course.trim() } : {}),
+			...(typeof item.term === 'string' && item.term.trim() ? { term: item.term.trim() } : {}),
 		}));
 		if (items.length >= query.limit) break;
 	}

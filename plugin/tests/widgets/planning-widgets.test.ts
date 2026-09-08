@@ -105,18 +105,20 @@ function services(
 				],
 			}),
 		},
-		todayTasks: {
-			id: 'optional-tasks.today-tasks',
-			availability: async () =>
-				adapterFallback(
-					'optional-plugin',
-					'Tasks missing.',
-					'native-vault.today-tasks',
-				),
-			query: async () => [
-				{ path: 'Daily/2026-08-11.md', line: 3, text: 'Read chapter' },
-			],
+		taskWindow: {
+			id: 'native-vault.task-window',
+			availability: async () => adapterAvailable('native-vault'),
+			query: async () => ({
+				overdue: [],
+				today: [{ path: 'Daily/2026-08-11.md', line: 3, text: 'Read chapter' }],
+				upcoming: [],
+			}),
 		},
+		dailyNotePath: (date) => `Daily/${date}.md`,
+		getTodayFocus: () => [],
+		toggleTaskFocus: () => 'added',
+		focusPathExists: async () => true,
+		scheduleRefresh: () => () => undefined,
 		openNote: vi.fn(async () => undefined),
 		reviewTaskToggle: vi.fn(async () => ({ outcome: 'cancelled' as const })),
 		undoTaskToggle: vi.fn(async () => undefined),
@@ -146,10 +148,8 @@ describe('planning Widgets', () => {
 		await new TodayTasksWidget(services()).mount(mounted.value);
 
 		expect(mounted.states.at(-1)).toEqual({ status: 'ready' });
-		expect(mounted.content.children[0]?.textContent).toBe(
-			'Native Markdown fallback',
-		);
-		const task = mounted.content.children[1]?.children[0];
+		expect(mounted.content.children[0]?.textContent).toBe('Native Markdown · overdue, today, next 7 days');
+		const task = mounted.content.children[2]?.children[0];
 		expect(task?.children[1]?.children[0]?.textContent).toBe('Read chapter');
 		expect(task?.children[1]?.children[1]?.textContent).toBe('2026-08-11.md:3');
 	});
@@ -178,7 +178,7 @@ describe('planning Widgets', () => {
 			services({ reviewTaskToggle, undoTaskToggle, getTaskUndos: () => undos }),
 		).mount(mounted.value);
 
-		mounted.content.children[1]?.children[0]?.children[0]?.click();
+		mounted.content.children[2]?.children[0]?.children[0]?.click();
 		await vi.waitFor(() => expect(reviewTaskToggle).toHaveBeenCalledWith({
 			path: 'Daily/2026-08-11.md',
 			line: 3,
@@ -191,21 +191,54 @@ describe('planning Widgets', () => {
 		await vi.waitFor(() => expect(undoTaskToggle).toHaveBeenCalledWith('session-1'));
 	});
 
-	it('disables task mutation for optional-plugin results', async () => {
+	it('keeps the Native task window writable when its availability declares a fallback', async () => {
 		const reviewTaskToggle = vi.fn(async () => ({ outcome: 'cancelled' as const }));
 		const mounted = context('home.today-tasks');
 		await new TodayTasksWidget(services({
 			reviewTaskToggle,
-			todayTasks: {
-				...services().todayTasks,
-				availability: async () => adapterAvailable('optional-plugin'),
-			},
+			taskWindow: { ...services().taskWindow, availability: async () => adapterFallback('optional-plugin', 'Fallback.', 'native-vault.task-window') },
 		})).mount(mounted.value);
 
-		const toggle = mounted.content.children[1]?.children[0]?.children[0];
-		expect(toggle?.disabled).toBe(true);
+		const toggle = mounted.content.children[2]?.children[0]?.children[0];
+		expect(toggle?.disabled).toBe(false);
 		toggle?.click();
-		expect(reviewTaskToggle).not.toHaveBeenCalled();
+		expect(reviewTaskToggle).toHaveBeenCalledOnce();
+	});
+
+	it('pins at most user-selected task references and marks missing note focus', async () => {
+		const toggleTaskFocus = vi.fn(() => 'added' as const);
+		const mounted = context('home.today-tasks');
+		await new TodayTasksWidget(services({
+			toggleTaskFocus,
+			getTodayFocus: () => [{ label: 'Missing reading', path: 'Reading/Missing.md' }],
+			focusPathExists: async () => false,
+		})).mount(mounted.value);
+
+		const missing = mounted.content.children[0]?.children[1];
+		expect(missing?.disabled).toBe(true);
+		expect(missing?.attributes.has('data-missing')).toBe(true);
+		mounted.content.children[3]?.children[0]?.children[2]?.click();
+		expect(toggleTaskFocus).toHaveBeenCalledWith({
+			path: 'Daily/2026-08-11.md', line: 3, text: 'Read chapter',
+		});
+	});
+
+	it('refreshes against the new local date after midnight', async () => {
+		let now = new Date(2026, 7, 11, 23, 59, 59);
+		let refresh: (() => void) | undefined;
+		const query = vi.fn(async (_input: unknown) => ({ overdue: [], today: [], upcoming: [] }));
+		const mounted = context('home.today-tasks');
+		await new TodayTasksWidget(services({
+			now: () => now,
+			taskWindow: { ...services().taskWindow, query },
+			scheduleRefresh: (callback) => { refresh = callback; return () => undefined; },
+		})).mount(mounted.value);
+		now = new Date(2026, 7, 12, 0, 0, 1);
+		refresh?.();
+		await vi.waitFor(() => expect(query).toHaveBeenCalledTimes(2));
+		expect(query.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+			date: '2026-08-12', dailyNotePath: 'Daily/2026-08-12.md',
+		}));
 	});
 
 	it('reviews a missing Daily Note and exposes course, paper, and book entry points', async () => {
@@ -241,16 +274,16 @@ describe('planning Widgets', () => {
 		const mounted = context('home.today-tasks');
 		await new TodayTasksWidget(
 			services({
-				todayTasks: {
-					...services().todayTasks,
-					query: async () => [],
+				taskWindow: {
+					...services().taskWindow,
+					query: async () => ({ overdue: [], today: [], upcoming: [] }),
 				},
 			}),
 		).mount(mounted.value);
 
 		expect(mounted.states.at(-1)).toEqual({
 			status: 'empty',
-			message: 'No Native Markdown tasks are due today.',
+			message: 'No Native Markdown tasks are overdue, due today, or due in the next 7 days.',
 		});
 	});
 

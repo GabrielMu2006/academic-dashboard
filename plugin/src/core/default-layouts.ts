@@ -45,14 +45,19 @@ export const DEFAULT_LAYOUT_STATE: PersistedLayoutState = Object.freeze({
 			item('home.today-tasks', 'home', 2, 1, 'large'),
 			item('home.recent-notes', 'home', 0, 3, 'large'),
 			item('home.shortcuts', 'home', 2, 3, 'medium'),
+			item('home.weekly-review', 'home', 2, 4, 'large'),
 		]),
 		study: Object.freeze([
 			item('study.review-queue', 'study', 0, 0, 'large'),
 			item('study.activity', 'study', 2, 0, 'large'),
 			item('study.contributions', 'study', 0, 2, 'large'),
+			item('study.course-folders', 'study', 2, 2, 'large'),
+			item('study.course-overview', 'study', 0, 4, 'large'),
+			item('study.review-session', 'study', 2, 4, 'large'),
 		]),
 		research: Object.freeze([
 			item('research.recent-papers', 'research', 0, 0, 'large'),
+			item('research.reading-queue', 'research', 2, 0, 'large'),
 		]),
 		agent: Object.freeze([
 			item('agent.status', 'agent', 0, 0, 'medium'),

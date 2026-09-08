@@ -17,6 +17,7 @@ describe('research paper query contracts', () => {
 			limit: 1,
 			status: 'reading',
 			search: 'graph learning',
+			tags: [],
 			year: 2026,
 		});
 	});
@@ -28,7 +29,7 @@ describe('research paper query contracts', () => {
 				status: 'done' as 'all',
 				year: 20,
 			}),
-		).toEqual({ limit: 20, status: 'all', search: '' });
+		).toEqual({ limit: 20, status: 'all', search: '', tags: [] });
 	});
 
 	it('derives bounded paper action capability from read and write mappings', () => {

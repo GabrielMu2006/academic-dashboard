@@ -25,7 +25,11 @@ import {
 	validateMetadataSettings,
 	type MetadataSettings,
 } from '../core/metadata-settings';
-import { isRecord, type ValidationIssue } from '../core/validation';
+import {
+	isRecord,
+	validationIssue,
+	type ValidationIssue,
+} from '../core/validation';
 import {
 	isWidgetId,
 	type WidgetId,
@@ -65,22 +69,44 @@ import type { LocalWriteLogEvent } from '../core/conservative-writes';
 
 export type LayoutStoreDiagnostic =
 	| {
-			readonly code: 'layout_update_rejected' | 'settings_update_rejected';
+			readonly code:
+				| 'layout_update_rejected'
+				| 'settings_update_rejected'
+				| 'settings_persistence_blocked';
 			readonly issues: readonly ValidationIssue[];
 	  }
 	| { readonly code: 'layout_save_failed'; readonly error: unknown };
+
+export type LayoutStorePersistence = 'writable' | 'blocked-future-schema';
 
 export interface RestoredLayoutStoreData {
 	readonly settings: DashboardSettings;
 	readonly source: 'stored' | 'migrated' | 'fallback';
 	readonly issues: readonly ValidationIssue[];
+	readonly persistence: LayoutStorePersistence;
 }
 
 export interface PageLayoutStoreOptions {
 	readonly initial: DashboardSettings;
 	readonly save: (settings: DashboardSettings) => Promise<void>;
 	readonly defaults?: PersistedLayoutState;
+	readonly persistence?: LayoutStorePersistence;
 	readonly onDiagnostic?: (diagnostic: LayoutStoreDiagnostic) => void;
+}
+
+const FUTURE_SCHEMA_ISSUE = validationIssue(
+	'unsupported_future_schema',
+	'settings.schemaVersion',
+	'The saved settings were created by a newer plugin version.',
+);
+
+function hasFutureSettingsSchema(input: unknown): boolean {
+	return (
+		isRecord(input) &&
+		typeof input.schemaVersion === 'number' &&
+		Number.isInteger(input.schemaVersion) &&
+		input.schemaVersion > SETTINGS_SCHEMA_VERSION
+	);
 }
 
 function settingsWithLayouts(
@@ -240,6 +266,66 @@ function upgradePhaseFiveLayouts(
 	return upgraded.value;
 }
 
+function addPageWidget(
+	layouts: PersistedLayoutState,
+	defaults: PersistedLayoutState,
+	pageId: PageId,
+	widgetId: string,
+): PersistedLayoutState {
+	if (
+		layouts.pages[pageId].some(
+			(layout) => layout.widgetId === widgetId,
+		)
+	) {
+		return layouts;
+	}
+	const defaultLayout = defaults.pages[pageId].find(
+		(layout) => layout.widgetId === widgetId,
+	);
+	if (!defaultLayout) return layouts;
+
+	const occupied = new Set<string>();
+	for (const layout of layouts.pages[pageId]) {
+		const policy = getWidgetSizePolicy(layout.size);
+		for (let x = layout.x; x < layout.x + policy.columns; x += 1) {
+			for (let y = layout.y; y < layout.y + policy.rows; y += 1) {
+				occupied.add(`${x}:${y}`);
+			}
+		}
+	}
+	const policy = getWidgetSizePolicy(defaultLayout.size);
+	let y = defaultLayout.y;
+	const candidateCells = (candidateY: number): readonly string[] => {
+		const cells: string[] = [];
+		for (
+			let x = defaultLayout.x;
+			x < defaultLayout.x + policy.columns;
+			x += 1
+		) {
+			for (let row = candidateY; row < candidateY + policy.rows; row += 1) {
+				cells.push(`${x}:${row}`);
+			}
+		}
+		return cells;
+	};
+	while (candidateCells(y).some((cell) => occupied.has(cell))) y += 1;
+
+	const upgraded = validatePersistedLayoutState({
+		schemaVersion: layouts.schemaVersion,
+		pages: {
+			...layouts.pages,
+			[pageId]: [
+				...layouts.pages[pageId],
+				Object.freeze({ ...defaultLayout, y }),
+			],
+		},
+	});
+	if (!upgraded.ok) {
+		throw new Error('The Study Widget layout migration is invalid.');
+	}
+	return upgraded.value;
+}
+
 export function restoreLayoutStoreData(
 	input: unknown,
 	fallbackLayouts: PersistedLayoutState = DEFAULT_LAYOUT_STATE,
@@ -258,6 +344,14 @@ export function restoreLayoutStoreData(
 	if (!fallbackResult.ok) {
 		throw new Error('The project default layout is invalid.');
 	}
+	if (hasFutureSettingsSchema(input)) {
+		return {
+			settings: fallbackResult.value,
+			source: 'fallback',
+			issues: Object.freeze([FUTURE_SCHEMA_ISSUE]),
+			persistence: 'blocked-future-schema',
+		};
+	}
 
 	if (
 		isRecord(input) &&
@@ -267,10 +361,17 @@ export function restoreLayoutStoreData(
 		const restored = restorePersistedLayoutState(input.gridstackSpikeLayout, {
 			fallback: fallbackLayouts,
 		});
+		const layouts = addPageWidget(addPageWidget(addPageWidget(addPageWidget(addPageWidget(
+			restored.value, fallbackLayouts, 'study', 'study.course-folders'),
+			fallbackLayouts, 'study', 'study.course-overview'),
+			fallbackLayouts, 'study', 'study.review-session'),
+			fallbackLayouts, 'research', 'research.reading-queue'),
+			fallbackLayouts, 'home', 'home.weekly-review');
 		return {
-			settings: settingsWithLayouts(fallbackResult.value, restored.value),
+			settings: settingsWithLayouts(fallbackResult.value, layouts),
 			source: restored.source === 'fallback' ? 'fallback' : 'migrated',
 			issues: restored.issues,
+			persistence: 'writable',
 		};
 	}
 
@@ -281,13 +382,23 @@ export function restoreLayoutStoreData(
 		isRecord(input) && isRecord(input.layouts)
 			? input.layouts.schemaVersion
 			: undefined;
-	const layouts = sourceLayoutSchema === 1 || sourceLayoutSchema === 2
+	const restoredLayouts = sourceLayoutSchema === 1 || sourceLayoutSchema === 2
 		? upgradePhaseFiveLayouts(restored.value.layouts, fallbackLayouts)
 		: restored.value.layouts;
+	const layouts = addPageWidget(addPageWidget(addPageWidget(addPageWidget(addPageWidget(
+		restoredLayouts, fallbackLayouts, 'study', 'study.course-folders'),
+		fallbackLayouts, 'study', 'study.course-overview'),
+		fallbackLayouts, 'study', 'study.review-session'),
+		fallbackLayouts, 'research', 'research.reading-queue'),
+		fallbackLayouts, 'home', 'home.weekly-review');
 	return {
 		settings: settingsWithLayouts(restored.value, layouts),
-		source: restored.source,
+		source:
+			restored.source === 'stored' && layouts !== restoredLayouts
+				? 'migrated'
+				: restored.source,
 		issues: restored.issues,
+		persistence: 'writable',
 	};
 }
 
@@ -303,6 +414,7 @@ export class PageLayoutStore {
 	private savedRevision = 0;
 	private failedRevision: number | null = null;
 	private saveTask: Promise<void> | null = null;
+	private persistenceBlockReported = false;
 
 	constructor(private readonly options: PageLayoutStoreOptions) {
 		this.settings = options.initial;
@@ -348,6 +460,29 @@ export class PageLayoutStore {
 
 	getAgentWriteLog(): readonly AgentWriteLogEntry[] {
 		return this.settings.agentWriteLog;
+	}
+
+	markAgentRequestComplete(entry: AgentWriteLogEntry): boolean {
+		let index = -1;
+		for (let candidateIndex = this.settings.agentWriteLog.length - 1; candidateIndex >= 0; candidateIndex -= 1) {
+			const candidate = this.settings.agentWriteLog[candidateIndex]!;
+			if (candidate.timestamp === entry.timestamp && candidate.workflowId === entry.workflowId &&
+				candidate.target === entry.target && candidate.affectedPaths.join('\n') === entry.affectedPaths.join('\n')) {
+				index = candidateIndex; break;
+			}
+		}
+		if (index < 0 || this.settings.agentWriteLog[index]?.outcome === 'user-marked-complete') return false;
+		const agentWriteLog = [...this.settings.agentWriteLog];
+		const source = agentWriteLog[index]!;
+		agentWriteLog[index] = Object.freeze({
+			timestamp: source.timestamp,
+			workflowId: source.workflowId,
+			target: source.target,
+			affectedPaths: source.affectedPaths,
+			outcome: 'user-marked-complete',
+			...(source.contextCharacters !== undefined ? { contextCharacters: source.contextCharacters } : {}),
+		});
+		return this.replaceSettings({ ...this.settings, agentWriteLog });
 	}
 
 	getLocalWriteSettings(): LocalWriteSettings {
@@ -402,6 +537,7 @@ export class PageLayoutStore {
 	}
 
 	cleanLocalWriteLog(now: Date): number {
+		if (!this.canMutateSettings()) return 0;
 		const current = this.settings.localWriteLog;
 		const cleaned = cleanExpiredLocalWriteLog(
 			current,
@@ -432,6 +568,7 @@ export class PageLayoutStore {
 	}
 
 	cleanAgentWriteLog(now: Date): number {
+		if (!this.canMutateSettings()) return 0;
 		const current = this.settings.agentWriteLog;
 		const cleaned = cleanExpiredAgentWriteLog(
 			current,
@@ -471,9 +608,7 @@ export class PageLayoutStore {
 			widgets: widgets.value,
 		});
 		if (!settings.ok) return false;
-		this.settings = settings.value;
-		this.requestSave();
-		return true;
+		return this.replaceSettings(settings.value);
 	}
 
 	updateMetadataSettings(input: unknown): boolean {
@@ -535,9 +670,9 @@ export class PageLayoutStore {
 			return false;
 		}
 
-		this.settings = settingsWithLayouts(this.settings, candidate.value);
-		this.requestSave();
-		return true;
+		return this.replaceSettings(
+			settingsWithLayouts(this.settings, candidate.value),
+		);
 	}
 
 	resetPage(pageId: PageId): void {
@@ -545,12 +680,11 @@ export class PageLayoutStore {
 	}
 
 	resetAllPages(): void {
-		this.settings = settingsWithLayouts(this.settings, this.defaults);
-		this.requestSave();
+		this.replaceSettings(settingsWithLayouts(this.settings, this.defaults));
 	}
 
 	persistCurrent(): void {
-		this.requestSave();
+		if (this.canMutateSettings()) this.requestSave();
 	}
 
 	async flush(): Promise<void> {
@@ -560,11 +694,13 @@ export class PageLayoutStore {
 	}
 
 	private requestSave(): void {
+		if (this.options.persistence === 'blocked-future-schema') return;
 		this.requestedRevision += 1;
 		this.startSaveTask();
 	}
 
 	private replaceSettings(input: unknown): boolean {
+		if (!this.canMutateSettings()) return false;
 		const settings = validateDashboardSettings(input);
 		if (!settings.ok) {
 			this.options.onDiagnostic?.({
@@ -576,6 +712,18 @@ export class PageLayoutStore {
 		this.settings = settings.value;
 		this.requestSave();
 		return true;
+	}
+
+	private canMutateSettings(): boolean {
+		if (this.options.persistence !== 'blocked-future-schema') return true;
+		if (!this.persistenceBlockReported) {
+			this.persistenceBlockReported = true;
+			this.options.onDiagnostic?.({
+				code: 'settings_persistence_blocked',
+				issues: Object.freeze([FUTURE_SCHEMA_ISSUE]),
+			});
+		}
+		return false;
 	}
 
 	private startSaveTask(): void {

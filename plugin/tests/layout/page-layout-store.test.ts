@@ -47,6 +47,54 @@ describe('restoreLayoutStoreData', () => {
 		expect(restored.settings).toEqual(input);
 	});
 
+	it('adds course-folder and course-overview cards to an existing Study layout', () => {
+		const settings = initialSettings();
+		const legacyStudy = settings.layouts.pages.study.filter(
+			({ widgetId }) => !['study.course-folders', 'study.course-overview', 'study.review-session'].includes(widgetId),
+		);
+		const restored = restoreLayoutStoreData({
+			...settings,
+			layouts: {
+				...settings.layouts,
+				pages: { ...settings.layouts.pages, study: legacyStudy },
+			},
+		});
+
+		expect(restored.source).toBe('migrated');
+		expect(restored.settings.layouts.pages.study).toEqual([
+			...legacyStudy,
+			expect.objectContaining({
+				widgetId: 'study.course-folders',
+				x: 2,
+				y: 2,
+				size: 'large',
+			}),
+			expect.objectContaining({
+				widgetId: 'study.course-overview',
+				x: 0,
+				y: 4,
+				size: 'large',
+			}),
+			expect.objectContaining({
+				widgetId: 'study.review-session',
+				x: 2,
+				y: 4,
+				size: 'large',
+			}),
+		]);
+	});
+
+	it('adds the reading queue to an existing Research layout', () => {
+		const settings = initialSettings();
+		const legacyResearch = settings.layouts.pages.research.filter(({ widgetId }) => widgetId !== 'research.reading-queue');
+		const restored = restoreLayoutStoreData({ ...settings, layouts: { ...settings.layouts, pages: { ...settings.layouts.pages, research: legacyResearch } } });
+		expect(restored.source).toBe('migrated');
+		expect(restored.settings.layouts.pages.research).toEqual([
+			...legacyResearch,
+			expect.objectContaining({ widgetId: 'research.reading-queue', x: 2, y: 0, size: 'large' }),
+		]);
+	});
+
 	it('upgrades exact Phase 5 default pages to content-safe Phase 6 geometry', () => {
 		const settings = initialSettings();
 		const restored = restoreLayoutStoreData({
@@ -201,9 +249,53 @@ describe('restoreLayoutStoreData', () => {
 		expect(restored.issues.map(({ code }) => code)).toContain('invalid_pages');
 		expect(JSON.stringify(restored.issues)).not.toContain('private note text');
 	});
+
+	it('blocks persistence when settings come from a newer schema', () => {
+		const restored = restoreLayoutStoreData({
+			...initialSettings(),
+			schemaVersion: SETTINGS_SCHEMA_VERSION + 1,
+			futureOnlyValue: 'must not be copied into diagnostics',
+		});
+
+		expect(restored.source).toBe('fallback');
+		expect(restored.persistence).toBe('blocked-future-schema');
+		expect(restored.issues.map(({ code }) => code)).toEqual([
+			'unsupported_future_schema',
+		]);
+		expect(JSON.stringify(restored.issues)).not.toContain('futureOnlyValue');
+	});
 });
 
 describe('PageLayoutStore', () => {
+	it('rejects every settings write while future-schema persistence is blocked', async () => {
+		const saves: unknown[] = [];
+		const diagnostics: LayoutStoreDiagnostic[] = [];
+		const initial = initialSettings();
+		const store = new PageLayoutStore({
+			initial,
+			persistence: 'blocked-future-schema',
+			save: async (settings) => {
+				saves.push(settings);
+			},
+			onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+		});
+
+		expect(store.updateDefaultPage('research')).toBe(false);
+		expect(store.updateWidgetSettings(store.getWidgetSettings())).toBe(false);
+		expect(store.updatePage('home', movedHome(2))).toBe(false);
+		store.resetAllPages();
+		store.persistCurrent();
+		expect(store.cleanAgentWriteLog(new Date())).toBe(0);
+		expect(store.cleanLocalWriteLog(new Date())).toBe(0);
+		await store.flush();
+
+		expect(store.getSnapshot()).toBe(initial);
+		expect(saves).toHaveLength(0);
+		expect(diagnostics.map(({ code }) => code)).toEqual([
+			'settings_persistence_blocked',
+		]);
+	});
+
 	it('updates one page independently and persists a frozen snapshot', async () => {
 		const saves: unknown[] = [];
 		const store = new PageLayoutStore({
@@ -314,11 +406,15 @@ describe('PageLayoutStore', () => {
 				quickLinks: [{ label: 'Course', path: 'Course' }],
 				commands: [],
 				quotes: ['Focus.'],
+				todayFocus: [{ label: 'Exam', path: 'Course/Exam.md', line: 8 }],
 			}),
 		).toBe(true);
 		await store.flush();
 
 		expect(store.getWidgetSettings().quickLinks[0]?.path).toBe('Course');
+		expect(store.getWidgetSettings().todayFocus).toEqual([
+			{ label: 'Exam', path: 'Course/Exam.md', line: 8 },
+		]);
 		expect(store.getSnapshot().layouts).toEqual(originalLayouts);
 		expect(saves).toHaveLength(1);
 	});
@@ -462,6 +558,17 @@ describe('PageLayoutStore', () => {
 		store.updatePage('home', movedHome(2));
 		await store.flush();
 		expect(store.getAgentWriteLog()).toHaveLength(1);
+	});
+
+	it('marks one retained Agent request complete without claiming verification', async () => {
+		const store = new PageLayoutStore({ initial: initialSettings(), save: async () => undefined });
+		store.appendAgentWriteLog({
+			timestamp: '2026-08-12T00:00:00.000Z', workflowId: 'summarize-current-note', target: 'codex', affectedPaths: ['Course/Week 1.md'], outcome: 'prefilled-awaiting-user-send', contextCharacters: 715,
+		});
+		const entry = store.getAgentWriteLog()[0]!;
+		expect(store.markAgentRequestComplete(entry)).toBe(true);
+		expect(store.getAgentWriteLog()[0]).toEqual({ ...entry, outcome: 'user-marked-complete' });
+		expect(store.markAgentRequestComplete(entry)).toBe(false);
 	});
 
 	it('persists content-free local write events and cleans them independently', async () => {

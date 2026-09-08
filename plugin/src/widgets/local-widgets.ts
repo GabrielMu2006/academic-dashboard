@@ -9,7 +9,7 @@ import type {
 	WidgetMountContext,
 	WidgetRegistration,
 } from '../core/widgets';
-import { formatDate, translateEnglishSource } from '../core/localization';
+import { formatDate, formatNumber, t, translateEnglishSource } from '../core/localization';
 
 export interface IntervalScheduler {
 	set(callback: () => void, milliseconds: number): number;
@@ -21,11 +21,19 @@ export interface QuickLinkTarget {
 	readonly path: string;
 }
 
+export interface VaultFolderLink {
+	readonly name: string;
+	readonly path: string;
+}
+
 export interface LocalWidgetServices {
 	readonly now: () => Date;
 	readonly scheduler: IntervalScheduler;
 	readonly getSettings: () => LocalWidgetSettings;
+	readonly getCourseFolderRoot: () => string;
 	readonly resolveQuickLink: (path: string) => QuickLinkTarget | null;
+	readonly listChildFolders: (path: string) => readonly VaultFolderLink[];
+	readonly subscribeToFolderChanges: (callback: () => void) => () => void;
 	readonly openQuickLink: (target: QuickLinkTarget) => Promise<void>;
 	readonly hasCommand: (commandId: string) => boolean;
 	readonly executeCommand: (commandId: string) => Promise<void>;
@@ -180,6 +188,96 @@ export class QuickLinksWidget extends RenderedWidget {
 			);
 		}
 		return button;
+	}
+}
+
+export class CourseFoldersWidget extends RenderedWidget {
+	private unsubscribe: (() => void) | null = null;
+
+	constructor(private readonly services: LocalWidgetServices) {
+		super();
+	}
+
+	override mount(context: WidgetMountContext): void {
+		super.mount(context);
+		this.unsubscribe = this.services.subscribeToFolderChanges(() => {
+			if (this.context) this.render(this.context);
+		});
+	}
+
+	override destroy(): void {
+		this.unsubscribe?.();
+		this.unsubscribe = null;
+		super.destroy();
+	}
+
+	protected render(context: WidgetMountContext): void {
+		const document = this.beginRender(context);
+		const root = this.services.getCourseFolderRoot();
+		const rootTarget = this.services.resolveQuickLink(root);
+		if (rootTarget?.kind !== 'folder') {
+			context.setState({
+				status: 'unavailable',
+				reason: t('courseFolders.unavailable', { root }),
+				recovery: t('courseFolders.recovery'),
+			});
+			return;
+		}
+
+		const folders = this.services.listChildFolders(root);
+		if (folders.length === 0) {
+			context.setState({
+				status: 'empty',
+				message: t('empty.courseFolders', { root }),
+			});
+			return;
+		}
+
+		context.contentEl.append(
+			element(
+				document,
+				'div',
+				'academic-dashboard-folder-summary',
+				t('courseFolders.count', {
+					count: formatNumber(folders.length),
+					root,
+				}),
+			),
+		);
+		const list = element(document, 'div', 'academic-dashboard-action-list');
+		for (const folder of folders) {
+			const button = element(
+				document,
+				'button',
+				'academic-dashboard-action',
+				folder.name,
+			);
+			button.type = 'button';
+			button.title = folder.path;
+			button.setAttribute(
+				'aria-label',
+				t('courseFolders.open', { name: folder.name }),
+			);
+			button.addEventListener(
+				'click',
+				() => {
+					void this.services.openQuickLink({
+						kind: 'folder',
+						path: folder.path,
+					}).catch(() => {
+						this.context?.setState({
+							status: 'error',
+							message: t('courseFolders.openFailed'),
+							code: 'course_folder_open_failed',
+						});
+					});
+				},
+				{ signal: this.events?.signal },
+			);
+			list.append(button);
+		}
+		context.contentEl.append(list);
+		context.setState({ status: 'ready' });
 	}
 }
 
@@ -345,12 +443,13 @@ function registration(
 	title: string,
 	size: 'small' | 'medium',
 	create: () => WidgetLifecycle,
+	page: 'home' | 'study' = 'home',
 ): WidgetRegistration {
 	return {
 		definition: {
 			id,
 			title,
-			allowedPages: ['home'],
+			allowedPages: [page],
 			allowedSizes: size === 'small' ? ['small', 'medium'] : ['medium', 'large'],
 			defaultSize: size,
 		},
@@ -380,6 +479,15 @@ export function createLocalWidgetRegistry(
 	registry.register(
 		registration('home.quote', 'Daily Quote', 'small', () =>
 			new LocalQuoteWidget(services),
+		),
+	);
+	registry.register(
+		registration(
+			'study.course-folders',
+			'Course Folders',
+			'medium',
+			() => new CourseFoldersWidget(services),
+			'study',
 		),
 	);
 	return registry;

@@ -81,6 +81,12 @@ focus, a template reference or rendered Dashboard-owned template when relevant,
 and explicit safety scope. Dashboard never reads an ordinary note body merely
 to prepare the request.
 
+The Dashboard first prepares a local preview without opening Claudian. It shows
+the workflow, requested target, access boundary, related paths, requested and
+resolved creation locations, and total/request/template character counts. The
+request field remains editable; a change invalidates the preview. A separate
+action then opens and pre-fills Claudian with that exact reviewed request.
+
 The Daily Note routing workflow resolves today's note from **Settings →
 Academic Dashboard → Daily Note creation**. It uses the configured academic
 metadata mappings to distinguish existing course, paper, and book notes. Claudian must
@@ -126,11 +132,13 @@ Read access may span the Vault. Agent writes must remain conservative. Never
 allow implicit large-scale rewrites, deletes, existing-file restructuring, or
 `.obsidian` modifications. Existing-note writes expose a plan/diff review;
 single-note creation uses the explicit Send authorization described above.
-Dashboard logs only its own attempted
-write-capable handoffs with minimal metadata; Claudian 2.1.3 cannot provide a
-supported completion signal, so the log must not claim that an Agent write
-completed. Expired entries are deleted according to the configurable retention
-policy (30 days default).
+Dashboard records its own read-only and write-capable handoff attempts with
+minimal metadata only. The five newest retained records can restore a workflow
+and target for another local preview, but cannot restore request text and never
+send automatically. Claudian 2.1.3 cannot provide a supported send or completion
+signal, so prefilled requests remain “waiting for user Send”; a manual complete
+marker is explicitly unverified. Expired entries are deleted according to the
+configurable retention policy (30 days default).
 
 ## Future expansion
 

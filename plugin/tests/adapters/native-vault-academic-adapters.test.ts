@@ -17,7 +17,10 @@ function port(): NativeVaultPort {
 			status: 'reviewed',
 			venue: 'CHI',
 			doi: '10.1000/example',
+			tags: ['ml', 'systems'],
+			related: ['[[Papers/linked]]', '[[Notes/course]]'],
 		},
+		'Papers/linked.md': { type: 'paper', title: 'Linked paper', authors: ['Turing'], year: 2025, status: 'unread', tags: ['ml'] },
 		'Papers/newer.md': {
 			kind: 'literature',
 			name: 'Mapped paper',
@@ -34,6 +37,7 @@ function port(): NativeVaultPort {
 			{ path: 'Papers/older.md', basename: 'older', modifiedAt: 10 },
 			{ path: 'Notes/course.md', basename: 'course', modifiedAt: 30 },
 			{ path: 'Papers/newer.md', basename: 'newer', modifiedAt: 20 },
+			{ path: 'Papers/linked.md', basename: 'linked', modifiedAt: 5 },
 		],
 		frontmatter: (path) => frontmatter[path] ?? null,
 	};
@@ -154,5 +158,14 @@ describe('Native Vault academic adapters', () => {
 			}),
 		]);
 		expect(await adapter.query({ limit: 8, status: 'unspecified' })).toEqual([]);
+		const tagged = await adapter.query({ limit: 8, tags: ['#ML'] });
+		expect(tagged.map(({ path }) => path)).toEqual(['Papers/older.md', 'Papers/linked.md']);
+		expect(tagged[0]?.relations).toEqual([
+			{ path: 'Papers/linked.md', title: 'Linked paper', basis: 'explicit-link', detail: 'related' },
+			{ path: 'Notes/course.md', title: 'course', basis: 'explicit-link', detail: 'related' },
+		]);
+		expect(tagged[1]?.relations).toEqual([
+			{ path: 'Papers/older.md', title: 'Older paper', basis: 'shared-tag', detail: 'ml' },
+		]);
 	});
 });

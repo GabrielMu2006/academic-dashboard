@@ -44,9 +44,14 @@ describe('fixed widget sizes and default layouts', () => {
 		expect(byId.get('home.calendar')?.size).toBe('large');
 		expect(byId.get('home.today-tasks')?.size).toBe('large');
 		expect(byId.get('home.recent-notes')?.size).toBe('large');
+		expect(byId.get('home.weekly-review')?.size).toBe('large');
 		expect(byId.get('study.review-queue')?.size).toBe('large');
 		expect(byId.get('study.activity')?.size).toBe('large');
 		expect(byId.get('study.contributions')?.size).toBe('large');
+		expect(byId.get('study.course-folders')?.size).toBe('large');
+		expect(byId.get('study.course-overview')?.size).toBe('large');
+		expect(byId.get('study.review-session')?.size).toBe('large');
+		expect(byId.get('research.reading-queue')?.size).toBe('large');
 		expect(byId.get('agent.status')?.size).toBe('medium');
 		expect(byId.get('agent.workflows')?.size).toBe('large');
 		expect(byId.get('agent.claudian-entry')?.size).toBe('medium');

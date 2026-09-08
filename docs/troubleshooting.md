@@ -62,6 +62,13 @@ undocumented Spaced Repetition APIs.
 
 ## Layout movement or persistence fails
 
+If a persistent notice says the settings were created by a newer Dashboard
+version, the plugin has entered its compatibility protection state. Settings,
+layout saves, migration saves, and log cleanup remain disabled so this older
+implementation cannot replace the newer `data.json`. Install a release whose
+version is at least as new as the one that created the file. Keep `data.json`
+in place while updating.
+
 Choose **Edit layout**. Drag a Widget to move it or its bottom-right handle to
 resize it. With keyboard focus on a Widget, use arrow keys to move,
 Shift+Right/Shift+Down to grow, and Shift+Left/Shift+Up to shrink. Press Escape

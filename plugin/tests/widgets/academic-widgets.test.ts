@@ -114,6 +114,8 @@ function services(
 					authors: ['Ada'],
 					year: 2026,
 					status: 'reading',
+					tags: [],
+					relations: [],
 					actions: {
 						identity: { field: 'type', value: 'paper' },
 						status: { state: 'available', field: 'status', current: 'reading' },
@@ -127,6 +129,10 @@ function services(
 		openNote: vi.fn(async () => undefined),
 		...overrides,
 	};
+}
+
+function descendants(root: FakeElement): FakeElement[] {
+	return root.children.flatMap((child) => [child, ...descendants(child)]);
 }
 
 describe('academic Widgets', () => {
@@ -146,11 +152,11 @@ describe('academic Widgets', () => {
 		const mounted = context('research');
 		await new RecentPapersWidget(services()).mount(mounted.value);
 
-		const button = mounted.content.children[1]?.children[0]?.children[0];
+		const button = descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-note academic-dashboard-paper');
 		expect(button?.children[0]?.textContent).toBe('Example paper');
 		expect(button?.children[1]?.textContent).toBe('Ada · 2026');
 		expect(button?.children[2]?.textContent).toBe('reading');
-		const actions = mounted.content.children[1]?.children[0]?.children[1];
+		const actions = descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-paper-actions');
 		expect(actions?.children[0]?.attributes.get('aria-label')).toBe(
 			'Set reading status for Example paper',
 		);
@@ -173,6 +179,8 @@ describe('academic Widgets', () => {
 					title: 'Unsafe paper',
 					modifiedAt: 1,
 					authors: [],
+					tags: [],
+					relations: [],
 					actions: {
 						identity: { field: 'type', value: 'paper' },
 						status: {
@@ -192,7 +200,7 @@ describe('academic Widgets', () => {
 			},
 		})).mount(mounted.value);
 
-		const actions = mounted.content.children[1]?.children[0]?.children[1];
+		const actions = descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-paper-actions');
 		expect(actions?.children[0]?.children.every((control) => control.disabled)).toBe(true);
 		expect(actions?.children[1]?.disabled).toBe(true);
 		expect(actions?.children[2]?.textContent).toContain('progress');
@@ -233,17 +241,14 @@ describe('academic Widgets', () => {
 			getPaperUndos: () => undos,
 		})).mount(mounted.value);
 
-		const reviewed = mounted.content.children[1]?.children[0]?.children[1]
-			?.children[0]?.children[2];
+		const reviewed = descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-paper-actions__status')?.children[2];
 		reviewed?.click();
 		await vi.waitFor(() => expect(setPaperStatus).toHaveBeenCalledWith(
 			expect.objectContaining({ path: 'Papers/example.md' }),
 			'reviewed',
 		));
-		await vi.waitFor(() => expect(mounted.content.children[1]?.className).toBe(
-			'academic-dashboard-task-undo',
-		));
-		mounted.content.children[1]?.children[1]?.click();
+		await vi.waitFor(() => expect(descendants(mounted.content).some(({ className }) => className === 'academic-dashboard-task-undo')).toBe(true));
+		descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-task-undo')?.children[1]?.click();
 		await vi.waitFor(() => expect(undoPaperAction).toHaveBeenCalledWith('session-paper-1'));
 	});
 
@@ -265,8 +270,7 @@ describe('academic Widgets', () => {
 		const mounted = context('research');
 		const widget = new RecentPapersWidget(services({ setPaperStatus }));
 		await widget.mount(mounted.value);
-		const statusControls = mounted.content.children[1]?.children[0]?.children[1]
-			?.children[0];
+		const statusControls = descendants(mounted.content).find(({ className }) => className === 'academic-dashboard-paper-actions__status');
 		statusControls?.children[0]?.click();
 		statusControls?.children[2]?.click();
 		expect(setPaperStatus).toHaveBeenCalledTimes(1);
@@ -292,9 +296,48 @@ describe('academic Widgets', () => {
 		}
 		await vi.waitFor(() => {
 			expect(query).toHaveBeenLastCalledWith(
-				expect.objectContaining({ status: 'reviewed', limit: 50 }),
+				expect.objectContaining({ status: 'reviewed', limit: 100 }),
 			);
 		});
+	});
+
+	it('saves a reproducible pinned research view in plugin settings', async () => {
+		const setSavedResearchViews = vi.fn(() => true);
+		const mounted = context('research');
+		await new RecentPapersWidget(services({ getSavedResearchViews: () => [], setSavedResearchViews })).mount(mounted.value);
+		const name = descendants(mounted.content).find(({ placeholder }) => placeholder === 'Saved view name');
+		if (name) name.value = 'My reading';
+		descendants(mounted.content).find(({ textContent }) => textContent === 'Save pinned view')?.click();
+		expect(setSavedResearchViews).toHaveBeenCalledWith([
+			expect.objectContaining({ name: 'My reading', search: '', status: 'all', tags: [], pinned: true }),
+		]);
+	});
+
+	it('reapplies a saved query with the same structured filters', async () => {
+		const query = vi.fn(async () => services().recentPapers.query({ limit: 1 }));
+		const mounted = context('research');
+		await new RecentPapersWidget(services({
+			recentPapers: { ...services().recentPapers, query },
+			getSavedResearchViews: () => [{ id: 'view-ml', name: 'ML view', search: 'graph', status: 'reading', tags: ['ml'], year: 2026, pinned: true }],
+		})).mount(mounted.value);
+		descendants(mounted.content).find(({ textContent }) => textContent === 'ML view')?.click();
+		await vi.waitFor(() => expect(query).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'graph', status: 'reading', tags: ['ml'], year: 2026 })));
+	});
+
+	it('paginates visible results and opens explainable related material', async () => {
+		const openNote = vi.fn(async () => undefined);
+		const papers = Array.from({ length: 15 }, (_, index) => ({
+			path: `Papers/${index}.md`, basename: `${index}`, title: `Paper ${index}`, modifiedAt: index,
+			authors: [], tags: ['ml'], relations: index === 0 ? [{ path: 'Papers/related.md', title: 'Related', basis: 'shared-tag' as const, detail: 'ml' }] : [],
+			actions: { identity: { field: 'type', value: 'paper' }, status: { state: 'unavailable' as const, field: 'status' }, favorite: { state: 'unavailable' as const, field: 'favorite', current: false, present: false } },
+		}));
+		const mounted = context('research');
+		await new RecentPapersWidget(services({ recentPapers: { ...services().recentPapers, query: async () => papers }, openNote })).mount(mounted.value);
+		expect(descendants(mounted.content).some(({ textContent }) => textContent === 'Showing 1–10 of 15 visible papers')).toBe(true);
+		descendants(mounted.content).find(({ textContent }) => textContent === 'Related')?.click();
+		expect(openNote).toHaveBeenCalledWith('Papers/related.md');
+		descendants(mounted.content).find(({ textContent }) => textContent === 'Next')?.click();
+		await vi.waitFor(() => expect(descendants(mounted.content).some(({ textContent }) => textContent === 'Showing 11–15 of 15 visible papers')).toBe(true));
 	});
 
 	it('shows empty and unavailable states explicitly', async () => {

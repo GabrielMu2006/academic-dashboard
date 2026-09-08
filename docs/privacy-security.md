@@ -10,20 +10,61 @@ client is the Phase 9 GitHub contributions port described below.
 
 Settings live in the plugin's Obsidian-managed `data.json`. They include layouts,
 Widget preferences, metadata mappings, templates, the selected Agent target,
-retention, and a minimal Agent write-handoff log. That log may contain only:
+retention, and minimal Agent request records. The compatibility field retaining
+those records is still named `agentWriteLog`. A record may contain only:
 
 - timestamp and approved workflow ID;
 - selected Codex/OpenCode target;
 - bounded Vault-relative affected paths;
-- Dashboard-to-Claudian handoff outcome; and
+- Dashboard-to-Claudian handoff evidence state;
+- an optional bounded prepared-character count; and
 - a bounded non-sensitive error code.
 
-Prompt text, note bodies, absolute paths, provider/model/auth details, API keys,
+Records cover read-only as well as write-capable workflow attempts. Prompt text,
+user request text, note bodies, absolute paths, provider/model/auth details, API keys,
 tokens, and free-form errors are not accepted by the log schema. The default
 retention is 30 days, configurable from 1 to 3650 days. Cleanup runs at startup
 and every six hours while the plugin is loaded.
 
-Settings schema 6 retains the schema-5 **name/reference** for a GitHub PAT
+Widget preferences may include up to three Today Focus references. Each stores
+a bounded display label, visible Vault-relative Markdown path, and optional
+positive task line. Pinning a task uses its first 80 characters as the display
+label. Note bodies, source fingerprints, and before/after task content are not
+persisted with the focus reference.
+
+Widget preferences may also store one bounded current-term string. Course
+Overview lists visible Vault paths, reads parsed course/term/type frontmatter,
+and reuses the bounded task and review reads already required by their Widgets.
+It excludes hidden/generated paths and does not persist scan results, note
+bodies, inferred course membership, or completion data.
+
+Reading Queue preferences may store up to 200 records containing a visible
+Vault-relative Markdown path, material kind, finite queue status, manual order,
+bounded next-step and position text, position unit, optional Reading ID, and a
+normalized identity signature. They contain no note body or source-file
+content. Saving progress changes plugin data only; it does not update paper
+status, book metadata, PDFs, or other source files.
+
+Review Session state is memory-only and is cleared when the Widget is destroyed
+or the session ends. It stores no mastery claim or review history. Course/type
+filters, viewed and skipped states, and the 10/20-item selection are not written
+to plugin data. A next-date update still uses the existing exact Native marker,
+preview, confirmation, conflict check, minimal local write log, and session Undo.
+
+Saved research views contain only a bounded name, normalized keyword/status/
+year/tag query, generated local ID, and pinned flag. Related-material lookup
+reads mapped frontmatter tags and explicit Vault-relative links, builds
+in-memory path/tag indexes, and exposes at most eight relations per paper. It
+does not persist a graph, infer relationships from titles, or read note bodies.
+
+When `data.json` declares a settings schema newer than this build supports,
+Dashboard uses defaults only for a temporary readable view and blocks every
+plugin-data write. The original file remains untouched until a compatible
+version is installed.
+
+Settings schema 7 migrates schema 6 without losing layouts, Widget preferences,
+metadata, templates, local/Agent logs, GitHub cache, or locale. It retains the
+schema-5 **name/reference** for a GitHub PAT
 held by Obsidian SecretStorage, the fixed six-hour cache duration, the explicit
 private-count preference, non-sensitive credential revision, last successful
 refresh timestamp, and up to 366 normalized date/count entries. It never
@@ -43,6 +84,25 @@ only timestamp, approved operation type, Vault-relative Markdown path, finite
 outcome, and an optional finite error code. They cannot retain note content,
 task text, old/new scalar values, prompts, PATs, secrets, absolute paths, or
 free-form errors and default to 30-day retention.
+
+Weekly Review drafts are assembled locally from visible Markdown modification
+times and those two retained logs. Each source is capped at 50 displayed items.
+The draft explicitly records its local calendar range, source counts, and
+missing-history limits; it does not treat modification time as study duration,
+completion, or mastery. Reading Queue state and Review Session state are not
+reported as weekly events because they do not provide durable event timestamps.
+The editable draft stays in the active Dashboard view until the user reviews
+creation. Confirmation creates one new file under `Weekly Reviews`; an existing
+or concurrently created destination causes the write to fail closed.
+
+The Agent preview is memory-only. It shows the selected workflow and target,
+related Vault-relative paths, requested/resolved creation location, access
+boundary, and total/request/template character counts. Editing the request
+invalidates that exact preview before Claudian can be opened. Recent records
+can restore only the workflow and target; they cannot restore request text.
+User-marked completion is labeled unverified. Current Claudian compatibility
+does not expose send or completion signals, so Dashboard never derives running,
+successful, or verified-result states from opening or prefilling the composer.
 
 ## Write and execution boundary
 
@@ -80,6 +140,9 @@ edit, or enter a hidden/configuration directory.
 Phase 8 Home controls do not expand that capability. Native Markdown task
 completion displays one exact line change and requires confirmation; its Undo
 token and full before/after note states stay in memory only until plugin unload.
+The listed task retains an opaque whole-note fingerprint and its exact source
+line in memory so changes before preview are rejected. Neither value is written
+to the local write log.
 Missing Daily Notes and course/paper/book notes display one Vault-relative path plus
 a bounded content preview before exclusive creation. Preview text, task text,
 template content, and Undo state are never added to the local write log.
@@ -91,6 +154,7 @@ results remain open-only with an explanation.
 Study review updates follow the same restriction. Only one exact Native
 Markdown review marker is previewed and confirmed. Missing, multiple, fenced,
 moved, conflicting, or optional-plugin-only targets remain read-only. Review
+targets use the same in-memory source fingerprint and exact-line check. Review
 Undo is session-only and cannot overwrite later note edits.
 
 Research status/favorite clicks authorize exactly one mapped scalar update in

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	DEFAULT_METADATA_SETTINGS,
 	RECOMMENDED_COURSE_NOTE_SCHEMA,
+	RECOMMENDED_BOOK_NOTE_SCHEMA,
 	RECOMMENDED_PAPER_NOTE_SCHEMA,
 	validateMetadataSettings,
 } from '../../src/core/metadata-settings';
@@ -17,6 +18,7 @@ describe('metadata settings', () => {
 			type: 'paper',
 			status: 'unread',
 		});
+		expect(RECOMMENDED_BOOK_NOTE_SCHEMA).toMatchObject({ type: 'book-note', edition: '', 'reading-id': '' });
 	});
 
 	it('accepts common custom property names without requiring a Vault migration', () => {
@@ -37,6 +39,7 @@ describe('metadata settings', () => {
 		expect(JSON.stringify(input)).toBe(before);
 		if (result.ok) {
 			expect(result.value.fields.course).toBe('课程');
+			expect(result.value.values.bookType).toBe('book-note');
 			expect(Object.isFrozen(result.value.fields)).toBe(true);
 		}
 	});
@@ -62,7 +65,7 @@ describe('metadata settings', () => {
 				title: 'course',
 				venue: '',
 			},
-			values: { courseNoteType: 'note', paperType: 'note' },
+			values: { courseNoteType: 'note', paperType: 'note', bookType: 'book-note' },
 		});
 
 		expect(result.ok).toBe(false);

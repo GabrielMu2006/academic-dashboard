@@ -11,6 +11,10 @@ describe('local Widget settings', () => {
 			commands: [{ label: ' Search ', commandId: 'global-search:open' }],
 			quotes: [' Keep going. '],
 			quoteFilePath: ' Reading/Quotes.md ',
+			todayFocus: [{ label: ' Exam ', path: 'Course/Exam.md', line: 4 }],
+			currentTerm: ' 2026 Fall ',
+			readingQueue: [],
+			savedResearchViews: [{ id: 'view-ml', name: ' ML reading ', search: ' graph ', status: 'reading', tags: ['#ML'], year: 2026, pinned: true }],
 		};
 		const result = validateLocalWidgetSettings(input);
 
@@ -23,6 +27,9 @@ describe('local Widget settings', () => {
 			expect(result.value.commands[0]?.label).toBe('Search');
 			expect(result.value.quotes).toEqual(['Keep going.']);
 			expect(result.value.quoteFilePath).toBe('Reading/Quotes.md');
+			expect(result.value.todayFocus).toEqual([{ label: 'Exam', path: 'Course/Exam.md', line: 4 }]);
+			expect(result.value.currentTerm).toBe('2026 Fall');
+			expect(result.value.savedResearchViews[0]).toEqual({ id: 'view-ml', name: 'ML reading', search: 'graph', status: 'reading', tags: ['ml'], year: 2026, pinned: true });
 			expect(Object.isFrozen(result.value)).toBe(true);
 		}
 	});
@@ -47,6 +54,26 @@ describe('local Widget settings', () => {
 		[
 			'invalid_quote_file_path',
 			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, quoteFilePath: '../Quotes.md' },
+		],
+		[
+			'invalid_today_focus',
+			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, todayFocus: [1, 2, 3, 4] },
+		],
+		[
+			'invalid_current_term',
+			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, currentTerm: 'x'.repeat(121) },
+		],
+		[
+			'invalid_reading_records',
+			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, readingQueue: Array.from({ length: 201 }, () => ({})) },
+		],
+		[
+			'invalid_saved_research_views',
+			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, savedResearchViews: Array.from({ length: 13 }, () => ({})) },
+		],
+		[
+			'invalid_saved_research_view',
+			{ ...DEFAULT_LOCAL_WIDGET_SETTINGS, savedResearchViews: [{ id: 'bad', name: 'Bad', search: '', status: 'done', tags: [], pinned: true }] },
 		],
 	] as const)('reports %s for malformed configuration', (code, input) => {
 		const result = validateLocalWidgetSettings(input);

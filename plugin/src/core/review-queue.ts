@@ -8,6 +8,7 @@ export interface ReviewQueueQuery {
 	readonly limit: number;
 	readonly kind?: ReviewKindFilter;
 	readonly search?: string;
+	readonly course?: string;
 }
 
 export interface ReviewQueueItem {
@@ -17,10 +18,14 @@ export interface ReviewQueueItem {
 	readonly dueCount: number;
 	readonly totalCount: number;
 	readonly nextDue?: string;
+	readonly course?: string;
+	readonly term?: string;
 	/** Native-only exact marker. Optional-plugin results never receive a write target. */
 	readonly reviewTarget?: Readonly<{
 		readonly line: number;
 		readonly currentDate: string;
+		readonly sourceFingerprint: string;
+		readonly sourceLine: string;
 	}>;
 }
 
@@ -35,6 +40,7 @@ export interface NormalizedReviewQueueQuery {
 	readonly limit: number;
 	readonly kind: ReviewKindFilter;
 	readonly search: string;
+	readonly course: string;
 }
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -71,5 +77,8 @@ export function normalizeReviewQueueQuery(
 	const search = typeof input.search === 'string'
 		? input.search.trim().toLocaleLowerCase().slice(0, 120)
 		: '';
-	return Object.freeze({ date, limit, kind, search });
+	const course = typeof input.course === 'string'
+		? input.course.trim().toLocaleLowerCase().slice(0, 120)
+		: '';
+	return Object.freeze({ date, limit, kind, search, course });
 }

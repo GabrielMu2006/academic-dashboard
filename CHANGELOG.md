@@ -5,8 +5,39 @@ structure and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-08
+
 ### Added
 
+- Configurable book-note type, edition, and stable reading-ID metadata mappings
+  as the identity foundation for the unified reading queue.
+- Unified Research reading queue for papers and books, with plugin-side status,
+  manual ordering, next-step text, and page/chapter/stage position. Rename
+  recovery uses unique stable IDs or edition-aware signatures.
+- Cancellable, read-only academic material diagnostic command with active mapping
+  preview, categorized counts, and bounded issue samples.
+- Home task window grouped into overdue, today, and the next seven days, using
+  the configured Daily Note path for undated tasks.
+- Up to three persisted Today Focus references for tasks, course notes, or
+  reading notes, with missing-reference states and task-row pin controls.
+- Study Course Overview with exact course/term separation, explainable metadata
+  or root-folder association, and links to notes, resources, due tasks, and due
+  reviews. Ambiguous shared resources remain unresolved.
+- Bounded Study review sessions with course/type selection, 10/20-item limits,
+  distinct viewed and skipped outcomes, source opening, and exact-target Native
+  review-date updates.
+- Saved and pinned Research views for keyword, year, status, and exact-tag
+  filters; 10-item pagination with bounded visible counts; and explainable
+  related material from explicit mapped links or shared tags.
+- Editable Home weekly review drafts with an explicit local date range, linked
+  modified notes, retained local-write and Agent-handoff evidence, and written
+  data-limit notes. Confirmation exclusively creates a new Markdown file and
+  refuses an existing or concurrently created destination.
+- Two-step Agent handoff preview showing workflow, target, related paths,
+  resolved creation destination, access boundary, and prepared character counts
+  before Claudian is opened. The five newest minimal request records support
+  restoring a workflow/target and manual unverified completion without storing
+  request text or claiming execution signals.
 - Book-reading note template, Home/command entry point, and Claudian workflow,
   with `Reading` as the default root and `type: book-note` metadata.
 - Related-material lookup for course, paper, and book creation: reuse one clear
@@ -17,7 +48,6 @@ structure and Semantic Versioning.
 - Immediate single-paper Research status choices and favorite toggle with
   content-safe mapped scalar writes and current-session conditional Undo.
 - Research paper write-field settings with explicit scalar-format guidance.
-
 - Review-first completion for one Native Markdown task with exact-line preview,
   explicit confirmation, and current-session conditional Undo.
 - Missing Daily Note, course-note, and paper-reading-note Home actions with one
@@ -25,6 +55,8 @@ structure and Semantic Versioning.
 
 ### Changed
 
+- Settings schema 7 migrates schema 6 intact and adds finite Agent request
+  evidence states plus an optional bounded prepared-character count.
 - Settings schema 6 preserves schema-5 state while adding book-note settings.
   Default roots are now `Course`, `Paper`, and `Reading`, and the default quote
   file is the Vault-root `每日引言.md`.
@@ -34,7 +66,6 @@ structure and Semantic Versioning.
 - Conservative paper transforms now preserve line endings, replace existing
   simple scalars in place, and insert a missing mapped scalar only into an
   otherwise safe existing top-level frontmatter block.
-
 - Course and paper command-palette creation now requires the same explicit
   path/content review used on Home.
 - Tasks-plugin results stay read-only unless the adapter uses the verifiable
@@ -42,6 +73,8 @@ structure and Semantic Versioning.
 
 ### Fixed
 
+- Native task and review parsing now shares a length-aware Markdown fence
+  scanner, and task edits preserve original line separators byte for byte.
 - Claudian course, paper, and book creation handoffs now receive a single path
   resolved by Dashboard through Obsidian's Vault API. They no longer deadlock by
   requiring a recursive scan while Shell access is forbidden, and Dashboard
@@ -49,6 +82,12 @@ structure and Semantic Versioning.
 
 ### Security
 
+- Native task and review write requests now bind to the exact source-document
+  fingerprint and original target line observed by the list adapter. Changes
+  before preview fail closed instead of selecting the new occupant of a line.
+- Saved settings from a newer schema now enter a protected compatibility
+  state. Automatic migration, log cleanup, layout edits, settings changes, and
+  unload flushing cannot overwrite the newer `data.json`.
 - Research actions bind to the list-observed scalar and mapped paper identity,
   use complete-content compare-and-swap, serialize per path, and reject stale,
   moved, malformed, duplicate, nested, multiline, tagged, aliased, or complex

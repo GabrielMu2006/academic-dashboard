@@ -94,6 +94,19 @@ function mappedAuthors(
 	);
 }
 
+function mappedList(frontmatter: Readonly<Record<string, unknown>>, field: string): readonly string[] {
+	const value = frontmatter[field];
+	const candidates = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;]/u) : [];
+	return Object.freeze(candidates.filter((item): item is string => typeof item === 'string').map((item) => item.trim()).filter(Boolean));
+}
+
+function normalizeRelatedPath(value: string): string | undefined {
+	const match = /^\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]$/u.exec(value.trim());
+	const path = (match?.[1] ?? value).trim().replace(/^\/+|\/+$/gu, '');
+	if (!path || path.includes('..') || path.startsWith('.')) return undefined;
+	return path.endsWith('.md') ? path : `${path}.md`;
+}
+
 function mappedYear(
 	frontmatter: Readonly<Record<string, unknown>>,
 	field: string,
@@ -163,10 +176,12 @@ export class NativeRecentPapersAdapter
 		const query = normalizeResearchPapersQuery(input);
 		const metadata = this.getMetadataSettings();
 		const writeSettings = this.getLocalWriteSettings().paper;
-		const papers: RecentPaperItem[] = [];
-		for (const file of [...this.vault.listMarkdownFiles()]
+		const candidates: Array<{ paper: Omit<RecentPaperItem, 'relations'>; explicitPaths: readonly string[] }> = [];
+		const visibleFiles = [...this.vault.listMarkdownFiles()]
 			.filter((candidate) => isNativeVaultNotePath(candidate.path))
-			.sort(recentFirst)) {
+			.sort(recentFirst);
+		const visibleByPath = new Map(visibleFiles.map((file) => [file.path, file]));
+		for (const file of visibleFiles) {
 			let frontmatter: Readonly<Record<string, unknown>> | null;
 			try {
 				frontmatter = this.vault.frontmatter(file.path);
@@ -185,6 +200,10 @@ export class NativeRecentPapersAdapter
 			const status = mappedStatus(frontmatter, metadata.fields.status);
 			const venue = mappedText(frontmatter, metadata.fields.venue);
 			const doi = mappedText(frontmatter, metadata.fields.doi);
+			const tags = mappedList(frontmatter, metadata.fields.tags).map((tag) => tag.replace(/^#/u, '').toLocaleLowerCase());
+			const explicitPaths = mappedList(frontmatter, metadata.fields.related).flatMap((value) => {
+				const path = normalizeRelatedPath(value); return path ? [path] : [];
+			});
 			const paper = Object.freeze({
 					...noteItem(file, title),
 					authors: mappedAuthors(frontmatter, metadata.fields.authors),
@@ -192,6 +211,7 @@ export class NativeRecentPapersAdapter
 					...(status === undefined ? {} : { status }),
 					...(venue === undefined ? {} : { venue }),
 					...(doi === undefined ? {} : { doi }),
+					tags: Object.freeze(tags),
 					actions: paperActionCapability(
 						frontmatter,
 						metadata.fields.noteType,
@@ -200,10 +220,31 @@ export class NativeRecentPapersAdapter
 						writeSettings,
 					),
 				});
-			if (!paperMatchesQuery(paper, query)) continue;
-			papers.push(paper);
-			if (papers.length >= query.limit) break;
+			candidates.push({ paper, explicitPaths: Object.freeze(explicitPaths) });
 		}
+		const papersByPath = new Map(candidates.map(({ paper }) => [paper.path, paper]));
+		const papersByTag = new Map<string, Array<Omit<RecentPaperItem, 'relations'>>>();
+		for (const { paper } of candidates) for (const tag of paper.tags) {
+			const tagged = papersByTag.get(tag) ?? []; tagged.push(paper); papersByTag.set(tag, tagged);
+		}
+		const papers = candidates.map(({ paper, explicitPaths }): RecentPaperItem => {
+			const relations: Array<RecentPaperItem['relations'][number]> = [];
+			const seen = new Set<string>([paper.path]);
+			for (const path of explicitPaths) {
+				const file = visibleByPath.get(path); if (!file || seen.has(path)) continue;
+				seen.add(path); relations.push({ path, title: papersByPath.get(path)?.title ?? file.basename, basis: 'explicit-link', detail: metadata.fields.related });
+				if (relations.length >= 8) break;
+			}
+			for (const tag of paper.tags) {
+				for (const other of papersByTag.get(tag) ?? []) {
+					if (seen.has(other.path)) continue; seen.add(other.path);
+					relations.push({ path: other.path, title: other.title, basis: 'shared-tag', detail: tag });
+					if (relations.length >= 8) break;
+				}
+				if (relations.length >= 8) break;
+			}
+			return Object.freeze({ ...paper, relations: Object.freeze(relations) });
+		}).filter((paper) => paperMatchesQuery(paper, query)).slice(0, query.limit);
 		return Promise.resolve(Object.freeze(papers));
 	}
 }
@@ -221,6 +262,7 @@ function paperMatchesQuery(
 		return false;
 	}
 	if (query.year !== undefined && paper.year !== query.year) return false;
+	if (query.tags.length > 0 && !query.tags.every((tag) => paper.tags.includes(tag))) return false;
 	if (!query.search) return true;
 	return [
 		paper.title,

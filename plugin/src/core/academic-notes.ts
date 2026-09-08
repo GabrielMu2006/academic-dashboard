@@ -17,6 +17,13 @@ export interface RecentPaperItem extends RecentNoteItem {
 	readonly status?: PaperStatus;
 	readonly venue?: string;
 	readonly doi?: string;
+	readonly tags: readonly string[];
+	readonly relations: readonly {
+		readonly path: string;
+		readonly title: string;
+		readonly basis: 'explicit-link' | 'shared-tag';
+		readonly detail: string;
+	}[];
 	readonly actions: PaperActionCapability;
 }
 

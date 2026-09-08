@@ -13,8 +13,13 @@ import {
 	type CalendarMonthQuery,
 	type TodayTaskItem,
 	type TodayTasksQuery,
+	type TaskWindow,
+	type TaskWindowQuery,
+	addIsoDays,
 } from '../core/calendar-tasks';
 import { isRecord } from '../core/validation';
+import { fingerprintContent } from '../core/conservative-writes';
+import { scanMarkdownLines } from '../core/markdown-structure';
 import {
 	isNativeVaultNotePath,
 	type NativeVaultPort,
@@ -129,8 +134,6 @@ const DUE_DATE_PATTERNS = [
 	/📅\s*(\d{4}-\d{2}-\d{2})/u,
 	/\bdue::\s*(\d{4}-\d{2}-\d{2})\b/iu,
 ] as const;
-const FENCE_PATTERN = /^\s*(```|~~~)/;
-
 function parseDueDate(text: string): string | undefined {
 	for (const pattern of DUE_DATE_PATTERNS) {
 		const value = pattern.exec(text)?.[1];
@@ -147,37 +150,81 @@ function cleanTaskText(text: string): string {
 		.trim();
 }
 
-function parseTodayTasks(
+function parseTasks(
 	path: string,
 	content: string,
-	date: string,
-	isDailyNote: boolean,
 ): readonly TodayTaskItem[] {
 	const tasks: TodayTaskItem[] = [];
-	let fence: string | null = null;
-	for (const [index, line] of content.split(/\r?\n/).entries()) {
-		const fenceMatch = FENCE_PATTERN.exec(line)?.[1];
-		if (fenceMatch) {
-			fence = fence === null ? fenceMatch : fence === fenceMatch ? null : fence;
-			continue;
-		}
-		if (fence !== null) continue;
-		const text = UNCHECKED_TASK_PATTERN.exec(line)?.[1];
+	const sourceFingerprint = fingerprintContent(content);
+	for (const line of scanMarkdownLines(content)) {
+		if (line.inCode) continue;
+		const text = UNCHECKED_TASK_PATTERN.exec(line.text)?.[1];
 		if (!text) continue;
 		const dueDate = parseDueDate(text);
-		if (dueDate !== date && !(isDailyNote && dueDate === undefined)) continue;
 		const cleaned = cleanTaskText(text);
 		if (!cleaned) continue;
 		tasks.push(
 			Object.freeze({
 				path,
-				line: index + 1,
+				line: line.number,
 				text: cleaned,
+				sourceFingerprint,
+				sourceLine: line.text,
 				...(dueDate ? { dueDate } : {}),
 			}),
 		);
 	}
 	return Object.freeze(tasks);
+}
+
+export class NativeTaskWindowAdapter
+	extends NativePlanningAdapter
+	implements DataAdapter<TaskWindowQuery, TaskWindow>
+{
+	readonly id = 'native-vault.task-window';
+
+	constructor(private readonly vault: NativeMarkdownTaskPort) {
+		super();
+	}
+
+	async query(input: TaskWindowQuery): Promise<TaskWindow> {
+		if (!isIsoDate(input.date)) throw new Error('Task window requires a valid date.');
+		const futureDays = Math.min(31, Math.max(1, Math.trunc(input.futureDays)));
+		const endDate = addIsoDays(input.date, futureDays);
+		if (!endDate) throw new Error('Task window end date is invalid.');
+		const limit = normalizeTaskLimit(input.limit);
+		const groups: { overdue: TodayTaskItem[]; today: TodayTaskItem[]; upcoming: TodayTaskItem[] } = {
+			overdue: [], today: [], upcoming: [],
+		};
+		const files = [...this.vault.listMarkdownFiles()]
+			.filter((file) => isNativeVaultNotePath(file.path))
+			.sort((left, right) => left.path.localeCompare(right.path));
+		for (const file of files) {
+			let content: string;
+			try {
+				content = await this.vault.readMarkdown(file.path);
+			} catch {
+				continue;
+			}
+			for (const task of parseTasks(file.path, content)) {
+				if (task.dueDate && task.dueDate < input.date) groups.overdue.push(task);
+				else if (task.dueDate === input.date ||
+					(task.dueDate === undefined && file.path === input.dailyNotePath)) groups.today.push(task);
+				else if (task.dueDate && task.dueDate > input.date && task.dueDate <= endDate) groups.upcoming.push(task);
+			}
+		}
+		const sort = (items: TodayTaskItem[]): readonly TodayTaskItem[] => Object.freeze(
+			items.sort((left, right) => (left.dueDate ?? input.date).localeCompare(right.dueDate ?? input.date) ||
+				left.path.localeCompare(right.path) || left.line - right.line),
+		);
+		let remaining = limit;
+		const take = (items: TodayTaskItem[]): readonly TodayTaskItem[] => {
+			const selected = sort(items).slice(0, remaining);
+			remaining -= selected.length;
+			return Object.freeze(selected);
+		};
+		return Object.freeze({ overdue: take(groups.overdue), today: take(groups.today), upcoming: take(groups.upcoming) });
+	}
 }
 
 export class NativeTodayTasksAdapter
@@ -204,9 +251,8 @@ export class NativeTodayTasksAdapter
 			} catch {
 				continue;
 			}
-			tasks.push(
-				...parseTodayTasks(file.path, content, input.date, file.basename === input.date),
-			);
+			tasks.push(...parseTasks(file.path, content).filter((task) =>
+				task.dueDate === input.date || (file.basename === input.date && task.dueDate === undefined)));
 			if (tasks.length >= limit) break;
 		}
 		return Object.freeze(tasks.slice(0, limit));

@@ -1,5 +1,6 @@
 import { PAPER_STATUSES, type PaperStatus } from './metadata-settings';
 import { isSafeVaultRelativePath } from './template-settings';
+import { joinMarkdownLines, scanMarkdownLines } from './markdown-structure';
 
 export const LOCAL_WRITE_OPERATION_TYPES = [
 	'task-toggle',
@@ -10,6 +11,7 @@ export const LOCAL_WRITE_OPERATION_TYPES = [
 	'create-course-note',
 	'create-paper-note',
 	'create-book-note',
+	'create-weekly-review',
 ] as const;
 
 export type LocalWriteOperationType =
@@ -47,6 +49,8 @@ export interface TaskToggleRequest {
 	readonly path: string;
 	readonly line: number;
 	readonly completed: boolean;
+	readonly expectedFingerprint: string;
+	readonly expectedLine: string;
 }
 
 export interface ReviewDateRequest {
@@ -54,6 +58,8 @@ export interface ReviewDateRequest {
 	readonly path: string;
 	readonly line: number;
 	readonly nextReviewDate: string;
+	readonly expectedFingerprint: string;
+	readonly expectedLine: string;
 }
 
 export interface PaperStatusRequest {
@@ -90,7 +96,8 @@ export interface CreationRequest {
 		| 'create-daily-note'
 		| 'create-course-note'
 		| 'create-paper-note'
-		| 'create-book-note';
+		| 'create-book-note'
+		| 'create-weekly-review';
 	readonly path: string;
 	readonly content: string;
 }
@@ -205,10 +212,6 @@ function boundedPreview(value: string): string {
 		: `${value.slice(0, MAX_PREVIEW_TEXT_LENGTH - 1)}…`;
 }
 
-function splitLines(content: string): string[] {
-	return content.split('\n');
-}
-
 function checkedLineTransform(
 	content: string,
 	lineNumber: number,
@@ -217,27 +220,16 @@ function checkedLineTransform(
 	if (!Number.isInteger(lineNumber) || lineNumber < 1) {
 		throw new ConservativeWriteError('invalid-request', 'Task line must be positive.');
 	}
-	const lines = splitLines(content);
+	const lines = [...scanMarkdownLines(content)];
 	const index = lineNumber - 1;
 	const target = lines[index];
 	if (target === undefined) {
 		throw new ConservativeWriteError('target-missing', 'Task line is unavailable.');
 	}
-	let fence: '`' | '~' | null = null;
-	for (let cursor = 0; cursor <= index; cursor += 1) {
-		const marker = /^\s*(`{3,}|~{3,})/u.exec(lines[cursor] ?? '')?.[1]?.[0];
-		if (marker) {
-			const kind = marker === '~' ? '~' : '`';
-			fence = fence === null ? kind : fence === kind ? null : fence;
-			if (cursor === index) {
-				throw new ConservativeWriteError('target-ambiguous', 'A fence is not a task.');
-			}
-		}
+	if (target.inCode) {
+		throw new ConservativeWriteError('target-ambiguous', 'Task is inside code.');
 	}
-	if (fence !== null) {
-		throw new ConservativeWriteError('target-ambiguous', 'Task is inside fenced code.');
-	}
-	const match = /^(\s*[-*+]\s+\[)([ xX])(\]\s+.+)$/u.exec(target);
+	const match = /^(\s*[-*+]\s+\[)([ xX])(\]\s+.+)$/u.exec(target.text);
 	if (!match) {
 		throw new ConservativeWriteError('target-ambiguous', 'Expected one Markdown task.');
 	}
@@ -246,8 +238,8 @@ function checkedLineTransform(
 		throw new ConservativeWriteError('invalid-request', 'Task already has that state.');
 	}
 	const after = `${match[1]}${completed ? 'x' : ' '}${match[3]}`;
-	lines[index] = after;
-	return { content: lines.join('\n'), before: target, after };
+	lines[index] = Object.freeze({ ...target, text: after });
+	return { content: joinMarkdownLines(lines), before: target.text, after };
 }
 
 function reviewLineTransform(
@@ -258,13 +250,16 @@ function reviewLineTransform(
 	if (!Number.isInteger(lineNumber) || lineNumber < 1 || !ISO_DATE_PATTERN.test(nextReviewDate)) {
 		throw new ConservativeWriteError('invalid-request', 'Review update is invalid.');
 	}
-	const lines = splitLines(content);
+	const lines = [...scanMarkdownLines(content)];
 	const index = lineNumber - 1;
 	const target = lines[index];
 	if (target === undefined) {
 		throw new ConservativeWriteError('target-missing', 'Review line is unavailable.');
 	}
-	const matches = [...target.matchAll(/<!--SR:!?(\d{4}-\d{2}-\d{2})([^>]*)-->/gu)];
+	if (target.inCode) {
+		throw new ConservativeWriteError('target-ambiguous', 'Review marker is inside code.');
+	}
+	const matches = [...target.text.matchAll(/<!--SR:!?(\d{4}-\d{2}-\d{2})([^>]*)-->/gu)];
 	if (matches.length !== 1) {
 		throw new ConservativeWriteError(
 			'target-ambiguous',
@@ -277,11 +272,11 @@ function reviewLineTransform(
 	}
 	const marker = match[0];
 	const replacement = marker.replace(match[1]!, nextReviewDate);
-	const after = `${target.slice(0, match.index)}${replacement}${target.slice(
+	const after = `${target.text.slice(0, match.index)}${replacement}${target.text.slice(
 		(match.index ?? 0) + marker.length,
 	)}`;
-	lines[index] = after;
-	return { content: lines.join('\n'), before: target, after };
+	lines[index] = Object.freeze({ ...target, text: after });
+	return { content: joinMarkdownLines(lines), before: target.text, after };
 }
 
 function parseFrontmatterKey(line: string): { key: string; value: string } | null {
@@ -482,6 +477,21 @@ export class ConservativeWriteService {
 		const beforeContent = await this.port.read(request.path);
 		if (beforeContent === null) {
 			throw new ConservativeWriteError('target-missing', 'Target note is unavailable.');
+		}
+		if (request.operation === 'task-toggle' || request.operation === 'review-date') {
+			if (
+				typeof request.expectedFingerprint !== 'string' ||
+				typeof request.expectedLine !== 'string'
+			) {
+				throw new ConservativeWriteError('invalid-request', 'Source identity is required.');
+			}
+			const observedLine = scanMarkdownLines(beforeContent)[request.line - 1]?.text;
+			if (
+				fingerprintContent(beforeContent) !== request.expectedFingerprint ||
+				observedLine !== request.expectedLine
+			) {
+				throw new ConservativeWriteError('conflict', 'Target changed after it was listed.');
+			}
 		}
 		const transformed = transformEdit(beforeContent, request);
 		const preview: EditWritePreview = Object.freeze({

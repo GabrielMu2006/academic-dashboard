@@ -5,6 +5,7 @@ import {
 	type ReviewVaultPort,
 } from '../../src/adapters/review-queue-adapters';
 import { DEFAULT_METADATA_SETTINGS } from '../../src/core/metadata-settings';
+import { fingerprintContent } from '../../src/core/conservative-writes';
 
 function vault(): ReviewVaultPort {
 	const markdown: Record<string, string> = {
@@ -30,7 +31,8 @@ function vault(): ReviewVaultPort {
 			{ path: 'Cards/future.md', basename: 'future', modifiedAt: 10 },
 		],
 		frontmatter: (path) =>
-			path === 'Cards/memory.md' ? { labels: ['flashcards/cognition'] } : null,
+			path === 'Cards/memory.md' ? { labels: ['flashcards/cognition'], course: 'Biology', term: 'Fall' } :
+				path === 'Course/notes.md' ? { course: 'Math', term: 'Fall' } : null,
 		readMarkdown: async (path) => {
 			const value = markdown[path];
 			if (!value) throw new Error('race');
@@ -53,7 +55,6 @@ describe('review queue adapters', () => {
 				path: 'Course/notes.md',
 				kind: 'note',
 				dueCount: 1,
-				reviewTarget: { line: 3, currentDate: '2026-08-10' },
 			}),
 			expect.objectContaining({
 				path: 'Course/ambiguous.md',
@@ -66,28 +67,70 @@ describe('review queue adapters', () => {
 				dueCount: 2,
 			}),
 		]);
+		expect(items[0]?.reviewTarget).toEqual({
+			line: 3,
+			currentDate: '2026-08-10',
+			sourceFingerprint: fingerprintContent(
+				'#review\nRecall the main theorem.\n<!--SR:!2026-08-10,3,250-->',
+			),
+			sourceLine: '<!--SR:!2026-08-10,3,250-->',
+		});
 		expect(items[1]).not.toHaveProperty('reviewTarget');
 	});
 
 	it('preserves original line numbers around fenced examples', async () => {
+		const source = [
+			'#review',
+			'```md',
+			'<!--SR:!2026-08-01,1,250-->',
+			'```',
+			'<!--SR:!2026-08-10,1,250-->',
+		].join('\n');
 		const adapter = new NativeReviewQueueAdapter(
 			{
 				listMarkdownFiles: () => [{ path: 'Review.md', basename: 'Review', modifiedAt: 1 }],
 				frontmatter: () => null,
-				readMarkdown: async () => [
-					'#review',
-					'```md',
-					'<!--SR:!2026-08-01,1,250-->',
-					'```',
-					'<!--SR:!2026-08-10,1,250-->',
-				].join('\n'),
+				readMarkdown: async () => source,
 			},
 			() => DEFAULT_METADATA_SETTINGS,
 		);
 
-		expect(await adapter.query({ date: '2026-08-11', limit: 20 })).toEqual([
-			expect.objectContaining({ reviewTarget: { line: 5, currentDate: '2026-08-10' } }),
-		]);
+		const items = await adapter.query({ date: '2026-08-11', limit: 20 });
+		expect(items).toHaveLength(1);
+		expect(items[0]?.reviewTarget).toEqual({
+			line: 5,
+			currentDate: '2026-08-10',
+			sourceFingerprint: fingerprintContent(source),
+			sourceLine: '<!--SR:!2026-08-10,1,250-->',
+		});
+	});
+
+	it('ignores review markers until a matching length-aware fence closes', async () => {
+		const source = [
+			'#review',
+			'````markdown',
+			'```',
+			'Inside <!--SR:!2026-08-01,1,250-->',
+			'````',
+			'Outside <!--SR:!2026-08-10,1,250-->',
+		].join('\n');
+		const adapter = new NativeReviewQueueAdapter(
+			{
+				listMarkdownFiles: () => [{ path: 'Review.md', basename: 'Review', modifiedAt: 1 }],
+				frontmatter: () => null,
+				readMarkdown: async () => source,
+			},
+			() => DEFAULT_METADATA_SETTINGS,
+		);
+
+		const items = await adapter.query({ date: '2026-08-11', limit: 20 });
+		expect(items).toHaveLength(1);
+		expect(items[0]?.reviewTarget).toEqual({
+			line: 6,
+			currentDate: '2026-08-10',
+			sourceFingerprint: fingerprintContent(source),
+			sourceLine: 'Outside <!--SR:!2026-08-10,1,250-->',
+		});
 	});
 
 	it('applies kind and search filters and omits future-only queues', async () => {
@@ -104,6 +147,9 @@ describe('review queue adapters', () => {
 				search: 'memory',
 			}),
 		).toEqual([expect.objectContaining({ path: 'Cards/memory.md' })]);
+		expect(await adapter.query({ date: '2026-08-11', limit: 20, course: ' biology ' })).toEqual([
+			expect.objectContaining({ path: 'Cards/memory.md', course: 'Biology', term: 'Fall' }),
+		]);
 	});
 
 	it('declares missing and incompatible plugins as explicit Native fallback', async () => {

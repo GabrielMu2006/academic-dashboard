@@ -9,6 +9,7 @@ export interface ResearchPapersQuery {
 	readonly status?: PaperStatusFilter;
 	readonly search?: string;
 	readonly year?: number;
+	readonly tags?: readonly string[];
 }
 
 export interface NormalizedResearchPapersQuery {
@@ -16,6 +17,7 @@ export interface NormalizedResearchPapersQuery {
 	readonly status: PaperStatusFilter;
 	readonly search: string;
 	readonly year?: number;
+	readonly tags: readonly string[];
 }
 
 export function normalizeResearchPapersQuery(
@@ -40,12 +42,26 @@ export function normalizeResearchPapersQuery(
 		input.year <= 9999
 			? input.year
 			: undefined;
+	const tags = Object.freeze(Array.isArray(input.tags)
+		? [...new Set(input.tags.filter((tag): tag is string => typeof tag === 'string').map((tag) => tag.trim().replace(/^#/u, '').toLocaleLowerCase()).filter(Boolean))].slice(0, 10)
+		: []);
 	return Object.freeze({
 		limit,
 		status,
 		search,
+		tags,
 		...(year === undefined ? {} : { year }),
 	});
+}
+
+export interface SavedResearchView {
+	readonly id: string;
+	readonly name: string;
+	readonly search: string;
+	readonly status: PaperStatusFilter;
+	readonly tags: readonly string[];
+	readonly year?: number;
+	readonly pinned: boolean;
 }
 
 export function paperActionCapability(

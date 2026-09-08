@@ -113,7 +113,12 @@ describe('Review Queue Widget', () => {
 			kind: 'note' as const,
 			dueCount: 1,
 			totalCount: 1,
-			reviewTarget: { line: 3, currentDate: '2026-08-10' },
+			reviewTarget: {
+				line: 3,
+				currentDate: '2026-08-10',
+				sourceFingerprint: 'v1-source',
+				sourceLine: 'Question <!--SR:!2026-08-10-->',
+			},
 		};
 		const reviewServices = services({
 			reviews: { ...services().reviews, query: async () => [reviewItem] },
@@ -144,7 +149,12 @@ describe('Review Queue Widget', () => {
 				availability: async () => ({ status: 'available', source: 'optional-plugin' }),
 				query: async () => [{
 					path: 'Plugin/card.md', title: 'card', kind: 'note', dueCount: 1, totalCount: 1,
-					reviewTarget: { line: 1, currentDate: '2026-08-10' },
+					reviewTarget: {
+						line: 1,
+						currentDate: '2026-08-10',
+						sourceFingerprint: 'v1-source',
+						sourceLine: 'Question <!--SR:!2026-08-10-->',
+					},
 				}],
 			},
 		})).mount(target.context);

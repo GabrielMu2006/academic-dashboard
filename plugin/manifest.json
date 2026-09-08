@@ -1,7 +1,7 @@
 {
 	"id": "academic-dashboard",
 	"name": "Academic Dashboard",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"minAppVersion": "1.11.4",
 	"description": "A calm, widget-based academic workspace for study and research, with a safe entry point to Claudian-powered agent workflows.",
 	"author": "Gabriel Mu",

@@ -21,11 +21,12 @@ describe('review queue contracts', () => {
 			search: '  Memory  ',
 		});
 
-		expect(query).toEqual({
+			expect(query).toEqual({
 			date: '2026-08-11',
 			limit: 100,
 			kind: 'flashcard',
 			search: 'memory',
+			course: '',
 		});
 		expect(Object.isFrozen(query)).toBe(true);
 	});
@@ -37,6 +38,6 @@ describe('review queue contracts', () => {
 				limit: Number.NaN,
 				kind: 'unknown' as 'all',
 			}),
-		).toEqual({ date: '1970-01-01', limit: 20, kind: 'all', search: '' });
+		).toEqual({ date: '1970-01-01', limit: 20, kind: 'all', search: '', course: '' });
 	});
 });

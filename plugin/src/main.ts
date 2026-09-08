@@ -2,11 +2,11 @@ import { moment, Notice, Plugin } from 'obsidian';
 import {
 	NativeRecentNotesAdapter,
 	NativeRecentPapersAdapter,
+	isNativeVaultNotePath,
 } from './adapters/native-vault-academic-adapters';
 import {
 	NativeCalendarAdapter,
-	NativeTodayTasksAdapter,
-	OptionalTasksPluginAdapter,
+	NativeTaskWindowAdapter,
 } from './adapters/native-calendar-task-adapters';
 import {
 	NativeObsidianActivityAdapter,
@@ -18,11 +18,13 @@ import {
 } from './adapters/obsidian-github-port';
 import {
 	createObsidianMarkdownTaskPort,
+	createObsidianAcademicMaterialDiagnosticPort,
+	createObsidianCourseOverviewPort,
 	createObsidianReviewVaultPort,
 	createObsidianSpacedRepetitionPort,
-	createObsidianTasksPluginPort,
 	createObsidianVaultPort,
 	openObsidianVaultNote,
+	openObsidianVaultFile,
 } from './adapters/obsidian-vault-port';
 import {
 	NativeReviewQueueAdapter,
@@ -30,6 +32,7 @@ import {
 } from './adapters/review-queue-adapters';
 import { registerAcademicResearchBasesView } from './adapters/obsidian-bases-research-adapter';
 import { ClaudianWorkflowAdapter } from './adapters/claudian-adapter';
+import { NativeReadingQueueAdapter } from './adapters/native-reading-queue-adapter';
 import { createObsidianClaudianPort } from './adapters/obsidian-claudian-port';
 import { createObsidianConservativeWritePort } from './adapters/obsidian-conservative-write-port';
 import {
@@ -40,6 +43,7 @@ import {
 	CREATE_COURSE_NOTE_COMMAND,
 	CREATE_PAPER_READING_NOTE_COMMAND,
 	OPEN_DASHBOARD_COMMAND,
+	DIAGNOSE_ACADEMIC_MATERIALS_COMMAND,
 } from './constants';
 import { DashboardView } from './dashboard-view';
 import { buildDashboardViewState, decideRevealStrategy } from './lifecycle';
@@ -60,9 +64,13 @@ import { registerActivityWidgets } from './widgets/activity-widgets';
 import { createLocalWidgetRegistry } from './widgets/local-widgets';
 import { createObsidianLocalWidgetServices } from './widgets/obsidian-local-widget-services';
 import { registerPlanningWidgets } from './widgets/planning-widgets';
-import { registerReviewQueueWidget } from './widgets/review-queue-widget';
+import { registerReviewQueueWidget, type ReviewQueueWidgetServices } from './widgets/review-queue-widget';
+import { registerReviewSessionWidget } from './widgets/review-session-widget';
+import { registerReadingQueueWidget } from './widgets/reading-queue-widget';
+import { registerWeeklyReviewWidget } from './widgets/weekly-review-widget';
 import { registerAgentWidgets } from './widgets/agent-widgets';
 import { NoteCreationModal } from './templates/note-creation-modal';
+import { AcademicMaterialDiagnosticModal } from './templates/academic-material-diagnostic-modal';
 import { NoteTemplateService, type NoteCreationKind } from './templates/note-template-service';
 import { createObsidianNoteTemplatePort } from './templates/obsidian-note-template-port';
 import {
@@ -80,8 +88,13 @@ import {
 	saveGithubPatToSecretStorage,
 } from './core/github-settings';
 import type { RecentPaperItem } from './core/academic-notes';
+import type { ReadingProgressRecord, ReadingQueueItem } from './core/reading-queue';
 import type { PaperStatus } from './core/metadata-settings';
 import { configureLocalization } from './core/localization';
+import { NativeCourseOverviewAdapter } from './adapters/native-course-overview-adapter';
+import { registerCourseOverviewWidget } from './widgets/course-overview-widget';
+import { buildWeeklyReviewDraft } from './core/weekly-review';
+import { WeeklyReviewService } from './templates/weekly-review-service';
 
 export default class AcademicDashboardPlugin extends Plugin {
 	private layoutStore: PageLayoutStore | null = null;
@@ -97,10 +110,17 @@ export default class AcademicDashboardPlugin extends Plugin {
 		this.layoutStore = new PageLayoutStore({
 			initial: restored.settings,
 			save: (settings) => this.saveData(settings),
+			persistence: restored.persistence,
 			onDiagnostic: (diagnostic) => this.reportLayoutDiagnostic(diagnostic),
 		});
 		if (data != null && restored.source !== 'stored') {
 			this.reportLayoutRestore(restored.source, restored.issues);
+		}
+		if (restored.persistence === 'blocked-future-schema') {
+			new Notice(
+				'Academic dashboard settings were created by a newer version. Settings and layout changes are disabled to protect the saved data.',
+				0,
+			);
 		}
 		if (restored.source === 'migrated') {
 			this.layoutStore.persistCurrent();
@@ -119,6 +139,9 @@ export default class AcademicDashboardPlugin extends Plugin {
 				() =>
 					this.layoutStore?.getWidgetSettings() ??
 					DEFAULT_LOCAL_WIDGET_SETTINGS,
+				() =>
+					this.layoutStore?.getTemplateSettings().courseNote.destinationFolder ??
+					restored.settings.templates.courseNote.destinationFolder,
 			),
 		);
 		const vaultPort = createObsidianVaultPort(this.app);
@@ -155,6 +178,31 @@ export default class AcademicDashboardPlugin extends Plugin {
 			() => this.layoutStore?.getSnapshot().localWrites ?? restored.settings.localWrites,
 			writeOptions,
 		);
+		const weeklyReviews = new WeeklyReviewService(conservativePort, writeOptions);
+		registerWeeklyReviewWidget(widgetRegistry, {
+			loadDraft: async () => buildWeeklyReviewDraft({
+				now: new Date(),
+				files: vaultPort.listMarkdownFiles().filter((file) => isNativeVaultNotePath(file.path)),
+				localWrites: this.layoutStore?.getLocalWriteLog() ?? restored.settings.localWriteLog,
+				agentWrites: this.layoutStore?.getAgentWriteLog() ?? restored.settings.agentWriteLog,
+			}),
+			reviewAndCreate: async (draft, editedContent) => {
+				const preview = await weeklyReviews.prepare(draft, editedContent);
+				const confirmed = await requestLocalWriteConfirmation(this.app, {
+					title: `Review Weekly Review for ${draft.range.startDate}`,
+					summary: 'Confirm creation of this edited draft. Existing files are never overwritten.',
+					path: preview.path,
+					afterLabel: 'Edited weekly review (bounded to 2,000 characters when needed)',
+					after: preview.preview.after,
+					confirmLabel: 'Create this Weekly Review',
+				});
+				if (!confirmed) return 'cancelled';
+				const result = await weeklyReviews.confirm(preview);
+				new Notice(`Created ${result.path}.`);
+				await openObsidianVaultNote(this.app, result.path);
+				return 'created';
+			},
+		});
 		registerAcademicWidgets(widgetRegistry, {
 			recentNotes: new NativeRecentNotesAdapter(vaultPort),
 			recentPapers: new NativeRecentPapersAdapter(
@@ -169,26 +217,116 @@ export default class AcademicDashboardPlugin extends Plugin {
 			getPaperUndos: () => Object.freeze(
 				this.paperUndos.map((undo) => Object.freeze({ ...undo })),
 			),
+			getSavedResearchViews: () => this.layoutStore?.getWidgetSettings().savedResearchViews ?? restored.settings.widgets.savedResearchViews,
+			setSavedResearchViews: (views) => {
+				const widgets = this.layoutStore?.getWidgetSettings() ?? restored.settings.widgets;
+				return this.layoutStore?.updateWidgetSettings({ ...widgets, savedResearchViews: views }) ?? false;
+			},
 		});
-		const nativeTasks = new NativeTodayTasksAdapter(
-			createObsidianMarkdownTaskPort(this.app),
+		const readingQueue = new NativeReadingQueueAdapter(
+			vaultPort,
+			() => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
 		);
+		const findReadingRecord = (records: readonly ReadingProgressRecord[], item: ReadingQueueItem): number =>
+			records.findIndex((record) => record.kind === item.kind && (
+				record.path === item.path ||
+				(item.stableId !== undefined && record.stableId === item.stableId) ||
+				record.signature === item.signature
+			));
+		const readingRecord = (item: ReadingQueueItem, order: number, patch: Partial<ReadingProgressRecord> = {}): ReadingProgressRecord => ({
+			path: item.path, kind: item.kind, status: item.status, order,
+			nextStep: item.nextStep, position: item.position, positionUnit: item.positionUnit,
+			...(item.stableId ? { stableId: item.stableId } : {}), signature: item.signature, ...patch,
+		});
+		registerReadingQueueWidget(widgetRegistry, {
+			queue: readingQueue,
+			getRecords: () => this.layoutStore?.getWidgetSettings().readingQueue ?? restored.settings.widgets.readingQueue,
+			updateRecord: (item, patch) => {
+				const widgets = this.layoutStore?.getWidgetSettings() ?? restored.settings.widgets;
+				const records = [...widgets.readingQueue];
+				const index = findReadingRecord(records, item);
+				const next = readingRecord(item, index >= 0 ? records[index]!.order : records.length, patch);
+				if (index >= 0) records[index] = next; else records.push(next);
+				return this.layoutStore?.updateWidgetSettings({ ...widgets, readingQueue: records }) ?? false;
+			},
+			moveRecord: (item, direction, visible) => {
+				const widgets = this.layoutStore?.getWidgetSettings() ?? restored.settings.widgets;
+				const records = [...widgets.readingQueue];
+				for (const [order, visibleItem] of visible.entries()) {
+					if (findReadingRecord(records, visibleItem) < 0) records.push(readingRecord(visibleItem, order));
+				}
+				const index = findReadingRecord(records, item);
+				const sameKind = records.map((record, recordIndex) => ({ record, recordIndex })).filter(({ record }) => record.kind === item.kind).sort((left, right) => left.record.order - right.record.order);
+				const position = sameKind.findIndex(({ recordIndex }) => recordIndex === index);
+				const target = sameKind[position + direction];
+				if (!target) return false;
+				const currentOrder = records[index]!.order;
+				records[index] = { ...records[index]!, order: target.record.order };
+				records[target.recordIndex] = { ...target.record, order: currentOrder };
+				return this.layoutStore?.updateWidgetSettings({ ...widgets, readingQueue: records }) ?? false;
+			},
+			openNote: (path) => openObsidianVaultNote(this.app, path),
+			subscribeToVaultChanges: (callback) => {
+				const refs = [
+					this.app.vault.on('create', callback),
+					this.app.vault.on('delete', callback),
+					this.app.vault.on('rename', callback),
+					this.app.vault.on('modify', callback),
+				];
+				return () => refs.forEach((ref) => this.app.vault.offref(ref));
+			},
+		});
+		const markdownTaskPort = createObsidianMarkdownTaskPort(this.app);
+		const taskWindow = new NativeTaskWindowAdapter(markdownTaskPort);
 		registerPlanningWidgets(widgetRegistry, {
 			now: () => new Date(),
 			calendar: new NativeCalendarAdapter(vaultPort),
-			todayTasks: new OptionalTasksPluginAdapter(
-				createObsidianTasksPluginPort(this.app),
-				nativeTasks,
-			),
+			taskWindow,
+			dailyNotePath: (date) => dailyNotePathForDate(
+				this.layoutStore?.getLocalWriteSettings().dailyNote ?? restored.settings.localWrites.dailyNote,
+				date,
+			) ?? '',
+			getTodayFocus: () => this.layoutStore?.getWidgetSettings().todayFocus ?? restored.settings.widgets.todayFocus,
+			toggleTaskFocus: (task) => {
+				const widgets = this.layoutStore?.getWidgetSettings() ?? restored.settings.widgets;
+				const index = widgets.todayFocus.findIndex((item) => item.path === task.path && item.line === task.line);
+				const todayFocus = index >= 0
+					? widgets.todayFocus.filter((_, itemIndex) => itemIndex !== index)
+					: widgets.todayFocus.length >= 3
+						? null
+						: [...widgets.todayFocus, { label: task.text.slice(0, 80), path: task.path, line: task.line }];
+				if (!todayFocus) return 'limit';
+				return this.layoutStore?.updateWidgetSettings({ ...widgets, todayFocus })
+					? index >= 0 ? 'removed' : 'added'
+					: 'unavailable';
+			},
+			focusPathExists: async (focus) => {
+				if (focus.line === undefined) return this.app.vault.getAbstractFileByPath(focus.path) !== null;
+				try {
+					const content = await markdownTaskPort.readMarkdown(focus.path);
+					const line = content.split(/\r\n|\n|\r/u)[focus.line - 1];
+					return typeof line === 'string' && /^\s*[-*+]\s+\[\s\]\s+/u.test(line);
+				} catch {
+					return false;
+				}
+			},
+			scheduleRefresh: (callback, delay) => {
+				const timer = window.setTimeout(callback, delay);
+				return () => window.clearTimeout(timer);
+			},
 			openNote: (path) => openObsidianVaultNote(this.app, path),
-			reviewTaskToggle: async (task) => {
-				const writes = this.localWrites;
-				if (!writes) throw new Error('The local write session is unavailable.');
-				const preview = await writes.prepareEdit({
+				reviewTaskToggle: async (task) => {
+					const writes = this.localWrites;
+					if (!writes || !task.sourceFingerprint || task.sourceLine === undefined) {
+						throw new Error('A safe Native task target is unavailable.');
+					}
+					const preview = await writes.prepareEdit({
 					operation: 'task-toggle',
 					path: task.path,
-					line: task.line,
-					completed: true,
+						line: task.line,
+						completed: true,
+						expectedFingerprint: task.sourceFingerprint,
+						expectedLine: task.sourceLine,
 				});
 				const confirmed = await requestLocalWriteConfirmation(this.app, {
 					title: 'Review task completion',
@@ -250,7 +388,33 @@ export default class AcademicDashboardPlugin extends Plugin {
 			createObsidianReviewVaultPort(this.app),
 			() => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
 		);
-		registerReviewQueueWidget(widgetRegistry, {
+		registerCourseOverviewWidget(widgetRegistry, {
+			now: () => new Date(),
+			overview: new NativeCourseOverviewAdapter({
+				vault: createObsidianCourseOverviewPort(this.app),
+				tasks: taskWindow,
+				reviews: nativeReviews,
+				getMetadata: () => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
+				getDailyNotePath: (date) => dailyNotePathForDate(
+					this.layoutStore?.getLocalWriteSettings().dailyNote ?? restored.settings.localWrites.dailyNote,
+					date,
+				) ?? '',
+			}),
+			getRootFolder: () => this.layoutStore?.getTemplateSettings().courseNote.destinationFolder ??
+				restored.settings.templates.courseNote.destinationFolder,
+			getCurrentTerm: () => this.layoutStore?.getWidgetSettings().currentTerm ?? restored.settings.widgets.currentTerm,
+			openFile: (path) => openObsidianVaultFile(this.app, path),
+			subscribeToVaultChanges: (callback) => {
+				const refs = [
+					this.app.vault.on('create', callback),
+					this.app.vault.on('delete', callback),
+					this.app.vault.on('rename', callback),
+					this.app.vault.on('modify', callback),
+				];
+				return () => refs.forEach((ref) => this.app.vault.offref(ref));
+			},
+		});
+		const reviewServices: ReviewQueueWidgetServices = {
 			now: () => new Date(),
 			reviews: new OptionalSpacedRepetitionAdapter(
 				createObsidianSpacedRepetitionPort(this.app),
@@ -265,8 +429,10 @@ export default class AcademicDashboardPlugin extends Plugin {
 				const preview = await writes.prepareEdit({
 					operation: 'review-date',
 					path: item.path,
-					line: item.reviewTarget.line,
-					nextReviewDate,
+						line: item.reviewTarget.line,
+						nextReviewDate,
+						expectedFingerprint: item.reviewTarget.sourceFingerprint,
+						expectedLine: item.reviewTarget.sourceLine,
 				});
 				const confirmed = await requestLocalWriteConfirmation(this.app, {
 					title: 'Review next review date',
@@ -299,7 +465,9 @@ export default class AcademicDashboardPlugin extends Plugin {
 			},
 			getReviewUndos: () =>
 				Object.freeze(this.reviewUndos.map((undo) => Object.freeze({ ...undo }))),
-		});
+		};
+		registerReviewQueueWidget(widgetRegistry, reviewServices);
+		registerReviewSessionWidget(widgetRegistry, reviewServices);
 		registerAcademicResearchBasesView(
 			this,
 			() => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
@@ -331,6 +499,11 @@ export default class AcademicDashboardPlugin extends Plugin {
 			},
 			academicMetadata: () =>
 				this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
+			getRequestLog: () =>
+				this.layoutStore?.getAgentWriteLog() ?? restored.settings.agentWriteLog,
+			markRequestComplete: (entry) =>
+				this.layoutStore?.markAgentRequestComplete(entry) ?? false,
+			openNote: (path) => openObsidianVaultNote(this.app, path),
 			creationContext: async (workflowId, title) => {
 				const kind = workflowId === 'create-course-note'
 					? 'course-note'
@@ -423,6 +596,21 @@ export default class AcademicDashboardPlugin extends Plugin {
 			name: 'Open dashboard',
 			callback: () => {
 				void this.revealDashboard();
+			},
+		});
+
+		this.addCommand({
+			id: DIAGNOSE_ACADEMIC_MATERIALS_COMMAND,
+			name: 'Diagnose academic materials',
+			callback: () => {
+				new AcademicMaterialDiagnosticModal(this.app, {
+					vault: createObsidianAcademicMaterialDiagnosticPort(this.app),
+					getMetadata: () => this.layoutStore?.getMetadataSettings() ?? restored.settings.metadata,
+					getRootFolder: () => this.layoutStore?.getTemplateSettings().courseNote.destinationFolder ??
+						restored.settings.templates.courseNote.destinationFolder,
+					getPaperRootFolder: () => this.layoutStore?.getTemplateSettings().paperReading.destinationFolder ??
+						restored.settings.templates.paperReading.destinationFolder,
+				}).open();
 			},
 		});
 

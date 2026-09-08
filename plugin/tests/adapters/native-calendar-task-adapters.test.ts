@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	NativeCalendarAdapter,
 	NativeTodayTasksAdapter,
+	NativeTaskWindowAdapter,
 	OptionalTasksPluginAdapter,
 	type NativeMarkdownTaskPort,
 } from '../../src/adapters/native-calendar-task-adapters';
 import type { NativeVaultPort } from '../../src/adapters/native-vault-academic-adapters';
+import { fingerprintContent } from '../../src/core/conservative-writes';
 
 describe('Native Calendar adapter', () => {
 	it('builds a leap-month calendar and links only existing ISO daily notes', async () => {
@@ -60,9 +62,12 @@ function taskPort(): NativeMarkdownTaskPort {
 			'- [ ] Example only 📅 2026-08-11',
 			'```',
 		].join('\n'),
+		'Other/2026-08-11.md': '- [ ] Wrong-folder undated task',
 		'Course/project.md': [
+			'- [ ] Late task 📅 2026-08-10',
 			'- [ ] Prepare slides due:: 2026-08-11',
 			'- [ ] Future task 📅 2026-08-12',
+			'- [ ] Later task 📅 2026-08-19',
 			'- [ ] Undated elsewhere',
 		].join('\n'),
 	};
@@ -74,6 +79,7 @@ function taskPort(): NativeMarkdownTaskPort {
 				modifiedAt: 30,
 			},
 			{ path: 'Course/project.md', basename: 'project', modifiedAt: 20 },
+			{ path: 'Other/2026-08-11.md', basename: '2026-08-11', modifiedAt: 15 },
 			{ path: 'Daily/2026-08-11.md', basename: '2026-08-11', modifiedAt: 10 },
 		],
 		readMarkdown: async (path) => content[path] ?? '',
@@ -81,6 +87,26 @@ function taskPort(): NativeMarkdownTaskPort {
 }
 
 describe('Native Markdown Today Tasks adapter', () => {
+	it('groups overdue, today, and the next seven days without duplicates', async () => {
+		const adapter = new NativeTaskWindowAdapter(taskPort());
+		const result = await adapter.query({
+			date: '2026-08-11',
+			futureDays: 7,
+			limit: 20,
+			dailyNotePath: 'Daily/2026-08-11.md',
+		});
+		expect(result.overdue.map(({ text }) => text)).toEqual(['Late task']);
+		expect(result.today.map(({ text }) => text)).toEqual([
+			'Prepare slides', 'Read chapter', 'Submit response',
+		]);
+		expect(result.today.some(({ text }) => text.includes('Wrong-folder'))).toBe(false);
+		expect(result.upcoming.map(({ text }) => text)).toEqual(['Future task']);
+		expect(result.upcoming.some(({ text }) => text === 'Later task')).toBe(false);
+		const identities = [...result.overdue, ...result.today, ...result.upcoming]
+			.map(({ path, line }) => `${path}:${line}`);
+		expect(new Set(identities).size).toBe(identities.length);
+	});
+
 	it('includes today-due tasks plus undated tasks in today’s daily note', async () => {
 		const tasks = await new NativeTodayTasksAdapter(taskPort()).query({
 			date: '2026-08-11',
@@ -89,10 +115,11 @@ describe('Native Markdown Today Tasks adapter', () => {
 
 		expect(tasks.map(({ text }) => text)).toEqual([
 			'Prepare slides',
+			'Wrong-folder undated task',
 			'Read chapter',
 			'Submit response',
 		]);
-		expect(tasks.map(({ line }) => line)).toEqual([1, 1, 2]);
+		expect(tasks.map(({ line }) => line)).toEqual([2, 1, 1, 2]);
 		expect(tasks[0]?.dueDate).toBe('2026-08-11');
 		expect(tasks.some(({ text }) => text.includes('Example only'))).toBe(false);
 	});
@@ -101,6 +128,34 @@ describe('Native Markdown Today Tasks adapter', () => {
 		const adapter = new NativeTodayTasksAdapter(taskPort());
 		expect(await adapter.query({ date: '2026-08-11', limit: 1 })).toHaveLength(1);
 		await expect(adapter.query({ date: '2026-02-30', limit: 20 })).rejects.toThrow();
+	});
+
+	it('keeps shorter and opposite fence markers inside the opening fence', async () => {
+		const content = [
+			'````markdown',
+			'```',
+			'- [ ] Backtick example',
+			'~~~',
+			'- [ ] Opposite marker example',
+			'````',
+			'- [ ] Visible task',
+		].join('\n');
+		const adapter = new NativeTodayTasksAdapter({
+			listMarkdownFiles: () => [{
+				path: 'Daily/2026-08-11.md', basename: '2026-08-11', modifiedAt: 1,
+			}],
+			readMarkdown: async () => content,
+		});
+
+		const tasks = await adapter.query({ date: '2026-08-11', limit: 20 });
+		expect(tasks).toEqual([
+			expect.objectContaining({
+				line: 7,
+				text: 'Visible task',
+				sourceFingerprint: fingerprintContent(content),
+				sourceLine: '- [ ] Visible task',
+			}),
+		]);
 	});
 });
 
@@ -118,7 +173,7 @@ describe('optional Tasks adapter boundary', () => {
 			reason: 'Tasks is not installed; using Native Markdown tasks.',
 			fallbackAdapterId: 'native-vault.today-tasks',
 		});
-		expect(await adapter.query({ date: '2026-08-11', limit: 20 })).toHaveLength(3);
+		expect(await adapter.query({ date: '2026-08-11', limit: 20 })).toHaveLength(4);
 	});
 
 	it('uses only an explicitly supplied compatible query capability', async () => {
@@ -149,7 +204,7 @@ describe('optional Tasks adapter boundary', () => {
 			new NativeTodayTasksAdapter(taskPort()),
 		);
 
-		expect(await adapter.query({ date: '2026-08-11', limit: 20 })).toHaveLength(3);
+		expect(await adapter.query({ date: '2026-08-11', limit: 20 })).toHaveLength(4);
 	});
 
 	it('rejects malformed optional-plugin output and uses the Native fallback', async () => {
@@ -164,7 +219,7 @@ describe('optional Tasks adapter boundary', () => {
 		);
 
 		const tasks = await adapter.query({ date: '2026-08-11', limit: 20 });
-		expect(tasks).toHaveLength(3);
+		expect(tasks).toHaveLength(4);
 		expect(tasks.some(({ text }) => text === 'Unsafe plugin task')).toBe(false);
 	});
 });

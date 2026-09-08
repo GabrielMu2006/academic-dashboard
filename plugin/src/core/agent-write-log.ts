@@ -1,7 +1,6 @@
 import {
 	isAgentTarget,
 	isAgentWorkflowId,
-	getAgentWorkflow,
 	type AgentTarget,
 	type AgentWorkflowId,
 } from './agent-workflows';
@@ -9,6 +8,7 @@ import type {
 	AgentWorkflowRequest,
 	ClaudianHandoffResult,
 } from './claudian';
+import { buildAgentWorkflowPrompt } from './agent-workflow-prompts';
 import { isSafeVaultRelativePath } from './template-settings';
 import {
 	isRecord,
@@ -24,6 +24,8 @@ export const AGENT_WRITE_LOG_OUTCOMES = [
 	'prepared-to-send',
 	'opened-without-prefill',
 	'handoff-failed',
+	'prefilled-awaiting-user-send',
+	'user-marked-complete',
 ] as const;
 
 export type AgentWriteLogOutcome = (typeof AGENT_WRITE_LOG_OUTCOMES)[number];
@@ -34,6 +36,7 @@ export interface AgentWriteLogEntry {
 	readonly target: AgentTarget;
 	readonly affectedPaths: readonly string[];
 	readonly outcome: AgentWriteLogOutcome;
+	readonly contextCharacters?: number;
 	readonly errorCode?: string;
 }
 
@@ -71,6 +74,15 @@ function validateEntry(
 		issues.push(validationIssue('invalid_agent_write_log_outcome', `${path}.outcome`, 'Expected a supported handoff outcome.'));
 	}
 	if (
+		input.contextCharacters !== undefined &&
+		(typeof input.contextCharacters !== 'number' ||
+			!Number.isInteger(input.contextCharacters) ||
+			input.contextCharacters < 0 ||
+			input.contextCharacters > 100_000)
+	) {
+		issues.push(validationIssue('invalid_agent_write_log_context_size', `${path}.contextCharacters`, 'Expected a bounded character count.'));
+	}
+	if (
 		input.errorCode !== undefined &&
 		(typeof input.errorCode !== 'string' ||
 			input.errorCode.length > 80 ||
@@ -87,6 +99,7 @@ function validateEntry(
 		target: input.target as AgentTarget,
 		affectedPaths: Object.freeze([...(input.affectedPaths as string[])]),
 		outcome: input.outcome as AgentWriteLogOutcome,
+		...(typeof input.contextCharacters === 'number' ? { contextCharacters: input.contextCharacters } : {}),
 		...(typeof input.errorCode === 'string' ? { errorCode: input.errorCode } : {}),
 	});
 }
@@ -130,23 +143,23 @@ export function agentWriteLogEntryForHandoff(
 	result: ClaudianHandoffResult,
 	now: Date,
 ): AgentWriteLogEntry | null {
-	if (getAgentWorkflow(request.workflowId).access === 'read-only') return null;
-	const affectedPaths = [
+	const affectedPaths = [...new Set([
 		request.currentNotePath,
 		request.resolvedNotePath ?? request.requestedDestination,
-	].filter((path): path is string => Boolean(path));
+	].filter((path): path is string => Boolean(path)))];
+	let contextCharacters: number | undefined;
+	try { contextCharacters = buildAgentWorkflowPrompt(request).length; } catch { /* Invalid requests retain only their finite failure metadata. */ }
 	const candidate = {
 		timestamp: now.toISOString(),
 		workflowId: request.workflowId,
 		target: request.target,
 		affectedPaths,
-		outcome: result.status === 'ready-for-review'
-			? 'prepared-for-review'
-			: result.status === 'ready-to-send'
-				? 'prepared-to-send'
+		outcome: result.status === 'ready-for-review' || result.status === 'ready-to-send'
+			? 'prefilled-awaiting-user-send'
 			: result.status === 'opened-without-prefill'
 					? 'opened-without-prefill'
 					: 'handoff-failed',
+		...(contextCharacters !== undefined ? { contextCharacters } : {}),
 		...(result.errorCode ? { errorCode: result.errorCode } : {}),
 	};
 	const validated = validateAgentWriteLog([candidate]);

@@ -44,6 +44,15 @@ class MemoryWritePort implements ConservativeWritePort {
 
 const PAPER_IDENTITY = Object.freeze({ field: 'type', value: 'paper' });
 
+function observedTarget(port: MemoryWritePort, path: string, line: number) {
+	const content = port.files.get(path);
+	if (content === undefined) throw new Error('Missing test target.');
+	return {
+		expectedFingerprint: fingerprintContent(content),
+		expectedLine: content.split(/\r\n|\n|\r/u)[line - 1] ?? '',
+	};
+}
+
 describe('conservative write paths and fingerprints', () => {
 	it('accepts only visible Vault-relative Markdown targets', () => {
 		expect(isSafeWritePath('Courses/Week 1.md')).toBe(true);
@@ -76,6 +85,7 @@ describe('single-target edit preparation', () => {
 			path: 'Daily Notes/2026-08-12.md',
 			line: 2,
 			completed: true,
+			...observedTarget(port, 'Daily Notes/2026-08-12.md', 2),
 		});
 
 		expect(preview.preview).toEqual({ before: '- [ ] Read', after: '- [x] Read' });
@@ -96,11 +106,13 @@ describe('single-target edit preparation', () => {
 		const service = new ConservativeWriteService(port);
 		await expect(service.prepareEdit({
 			operation: 'task-toggle', path: 'Note.md', line: 2, completed: true,
+			...observedTarget(port, 'Note.md', 2),
 		})).rejects.toMatchObject({ code: 'target-ambiguous' });
 
 		port.files.set('Review.md', 'Q <!--SR:!2026-08-12--> <!--SR:!2026-08-13-->');
 		await expect(service.prepareEdit({
 			operation: 'review-date', path: 'Review.md', line: 1, nextReviewDate: '2026-08-20',
+			...observedTarget(port, 'Review.md', 1),
 		})).rejects.toMatchObject({ code: 'target-ambiguous' });
 	});
 
@@ -110,8 +122,78 @@ describe('single-target edit preparation', () => {
 		const service = new ConservativeWriteService(port);
 		const preview = await service.prepareEdit({
 			operation: 'review-date', path: 'Review.md', line: 1, nextReviewDate: '2026-08-20',
+			...observedTarget(port, 'Review.md', 1),
 		});
 		expect(preview.preview.after).toBe('Question <!--SR:!2026-08-20,3,250-->');
+	});
+
+	it('preserves CRLF and the terminal newline when toggling and undoing a task', async () => {
+		const port = new MemoryWritePort();
+		const before = '# Today\r\n- [ ] Read\r\n';
+		port.files.set('Task.md', before);
+		const service = new ConservativeWriteService(port);
+		const result = await service.commit(await service.prepareEdit({
+			operation: 'task-toggle',
+			path: 'Task.md',
+			line: 2,
+			completed: true,
+			...observedTarget(port, 'Task.md', 2),
+		}));
+
+		expect(port.files.get('Task.md')).toBe('# Today\r\n- [x] Read\r\n');
+		await service.undo(result.undoToken!);
+		expect(port.files.get('Task.md')).toBe(before);
+	});
+
+	it('rejects task and review targets inside length-aware fences', async () => {
+		const port = new MemoryWritePort();
+		port.files.set('Task.md', '````markdown\n```\n- [ ] example\n````');
+		port.files.set('Review.md', '~~~markdown\nQuestion <!--SR:!2026-08-12-->\n~~~');
+		const service = new ConservativeWriteService(port);
+
+		await expect(service.prepareEdit({
+			operation: 'task-toggle', path: 'Task.md', line: 3, completed: true,
+			...observedTarget(port, 'Task.md', 3),
+		})).rejects.toMatchObject({ code: 'target-ambiguous' });
+		await expect(service.prepareEdit({
+			operation: 'review-date', path: 'Review.md', line: 2,
+			nextReviewDate: '2026-08-20',
+			...observedTarget(port, 'Review.md', 2),
+		})).rejects.toMatchObject({ code: 'target-ambiguous' });
+	});
+
+	it('rejects an item when its source document changed after listing', async () => {
+		const port = new MemoryWritePort();
+		const listed = '- [ ] task A\n- [ ] task B';
+		port.files.set('Task.md', listed);
+		const identity = observedTarget(port, 'Task.md', 1);
+		port.files.set('Task.md', '- [ ] task B\n- [ ] task A');
+		const service = new ConservativeWriteService(port);
+
+		await expect(service.prepareEdit({
+			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...identity,
+		})).rejects.toMatchObject({ code: 'conflict' });
+		expect(port.files.get('Task.md')).toBe('- [ ] task B\n- [ ] task A');
+	});
+
+	it('rejects a review marker whose listed date or document changed', async () => {
+		const port = new MemoryWritePort();
+		port.files.set('Review.md', 'Question <!--SR:!2026-08-12,3,250-->');
+		const identity = observedTarget(port, 'Review.md', 1);
+		port.files.set('Review.md', 'Question <!--SR:!2026-08-13,3,250-->');
+		const service = new ConservativeWriteService(port);
+
+		await expect(service.prepareEdit({
+			operation: 'review-date',
+			path: 'Review.md',
+			line: 1,
+			nextReviewDate: '2026-08-20',
+			...identity,
+		})).rejects.toMatchObject({ code: 'conflict' });
+		expect(port.files.get('Review.md')).toBe(
+			'Question <!--SR:!2026-08-13,3,250-->',
+		);
 	});
 
 	it('updates one supported paper scalar and rejects duplicate or complex targets', async () => {
@@ -297,6 +379,7 @@ describe('compare-before-write and creation contracts', () => {
 		const service = new ConservativeWriteService(port);
 		const preview = await service.prepareEdit({
 			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...observedTarget(port, 'Task.md', 1),
 		});
 		port.files.set('Task.md', '- [ ] User edit');
 		await expect(service.commit(preview)).rejects.toMatchObject({ code: 'conflict' });
@@ -305,6 +388,7 @@ describe('compare-before-write and creation contracts', () => {
 		port.files.set('Task.md', '- [ ] Original');
 		const raced = await service.prepareEdit({
 			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...observedTarget(port, 'Task.md', 1),
 		});
 		port.beforeSwap = () => port.files.set('Task.md', '- [ ] Atomic race');
 		await expect(service.commit(raced)).rejects.toMatchObject({ code: 'conflict' });
@@ -317,6 +401,7 @@ describe('compare-before-write and creation contracts', () => {
 		const service = new ConservativeWriteService(port);
 		const preview = await service.prepareEdit({
 			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...observedTarget(port, 'Task.md', 1),
 		});
 		await expect(service.commit({ ...preview, path: 'Other.md' })).rejects.toMatchObject({
 			code: 'invalid-request',
@@ -330,6 +415,7 @@ describe('compare-before-write and creation contracts', () => {
 		const service = new ConservativeWriteService(port);
 		const result = await service.commit(await service.prepareEdit({
 			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...observedTarget(port, 'Task.md', 1),
 		}));
 		port.files.set('Task.md', '- [x] Original plus user note');
 		await expect(service.undo(result.undoToken!)).rejects.toMatchObject({ code: 'conflict' });
@@ -366,6 +452,7 @@ describe('compare-before-write and creation contracts', () => {
 		});
 		const preview = await service.prepareEdit({
 			operation: 'task-toggle', path: 'Task.md', line: 1, completed: true,
+			...observedTarget(port, 'Task.md', 1),
 		});
 		port.files.set('Task.md', '- [ ] Changed');
 		await expect(service.commit(preview)).rejects.toMatchObject({ code: 'conflict' });

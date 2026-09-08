@@ -100,9 +100,9 @@ describe('Agent write log', () => {
 		).toEqual(result.value);
 	});
 
-	it('logs proposed and direct write handoffs but not read-only handoffs', () => {
+	it('logs every request with minimal evidence state and bounded context size', () => {
 		const now = new Date('2026-08-12T00:00:00.000Z');
-		expect(agentWriteLogEntryForHandoff(
+		const readOnly = agentWriteLogEntryForHandoff(
 			{
 				workflowId: 'summarize-current-note',
 				target: 'codex',
@@ -116,9 +116,15 @@ describe('Agent write log', () => {
 				requiresTargetConfirmation: true,
 			},
 			now,
-		)).toBeNull();
+		);
+		expect(readOnly).toEqual(expect.objectContaining({
+			workflowId: 'summarize-current-note',
+			affectedPaths: ['Course/Week 1.md'],
+			outcome: 'prefilled-awaiting-user-send',
+		}));
+		expect(typeof readOnly?.contextCharacters).toBe('number');
 
-		expect(agentWriteLogEntryForHandoff(
+		const direct = agentWriteLogEntryForHandoff(
 			{
 				workflowId: 'repair-current-note-markdown',
 				target: 'opencode',
@@ -133,14 +139,15 @@ describe('Agent write log', () => {
 				errorCode: 'handoff-failed',
 			},
 			now,
-		)).toEqual({
+		);
+		expect(direct).toEqual(expect.objectContaining({
 			timestamp: '2026-08-12T00:00:00.000Z',
 			workflowId: 'repair-current-note-markdown',
 			target: 'opencode',
 			affectedPaths: ['Course/Week 1.md'],
 			outcome: 'handoff-failed',
 			errorCode: 'handoff-failed',
-		});
+		}));
 
 		expect(agentWriteLogEntryForHandoff(
 			{
@@ -158,12 +165,23 @@ describe('Agent write log', () => {
 				requiresTargetConfirmation: true,
 			},
 			now,
-		)).toEqual({
+		)).toEqual(expect.objectContaining({
 			timestamp: '2026-08-12T00:00:00.000Z',
 			workflowId: 'create-book-reading-note',
 			target: 'codex',
 			affectedPaths: ['Reading/Book/Book.md'],
-			outcome: 'prepared-to-send',
-		});
+			outcome: 'prefilled-awaiting-user-send',
+		}));
+		expect(typeof direct?.contextCharacters).toBe('number');
+	});
+
+	it('accepts a user-complete marker while rejecting unbounded context metadata', () => {
+		expect(validateAgentWriteLog([{
+			timestamp: '2026-08-12T00:00:00.000Z', workflowId: 'summarize-current-note', target: 'codex', affectedPaths: [], outcome: 'user-marked-complete', contextCharacters: 900,
+		}]).ok).toBe(true);
+		const invalid = validateAgentWriteLog([{
+			timestamp: '2026-08-12T00:00:00.000Z', workflowId: 'summarize-current-note', target: 'codex', affectedPaths: [], outcome: 'prefilled-awaiting-user-send', contextCharacters: 100_001,
+		}]);
+		expect(invalid.ok).toBe(false);
 	});
 });

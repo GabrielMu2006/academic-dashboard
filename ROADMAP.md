@@ -4,7 +4,10 @@
 
 - Audit the repository, Obsidian version, target Vault conventions, installed community plugins, Claudian availability, and current Codex/OpenCode integration points.
 - Research candidate open-source foundations for dashboard composition, fixed-grid drag layout, persistence, and widgets.
-- Select or reject candidates using the rubric in `docs/dashboard-research.md`; record license, maintenance, compatibility, architecture fit, and extraction cost.
+- Select or reject candidates using a recorded rubric covering license,
+  maintenance, compatibility, architecture fit, and extraction cost. The
+  original internal research notes are intentionally excluded from the public
+  repository.
 - Confirm safe integration boundaries for Claudian, including how it can launch/receive structured workflows and report outcomes.
 
 **Exit criteria:** documented technical foundation decision, integration assumptions verified, and no premature commitment to an unmaintained/incompatible fork.
@@ -143,7 +146,9 @@ fail softly; and clean-archive plus read-only Obsidian acceptance pass.
 
 ## Phase 10 — Conservative Research paper actions
 
-**Status:** Accepted. See `docs/phase-10-verification-report.md`.
+**Status:** Accepted. The public evidence is the Phase 10 source, automated
+tests, changelog entry, and release checks; the path-specific internal
+verification report is intentionally excluded from this repository.
 
 - Add one-click, single-paper `status` selection and `favorite` toggle using the
   accepted schema-5 mappings and Phase 7 conservative-write service.
